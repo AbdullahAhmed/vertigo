@@ -1,0 +1,7 @@
+# generated scratch
+build/snaps/
+build/snapserver.js
+build/*.py
+build/__pycache__/
+build/sfx_src/
+.claude/

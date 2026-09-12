@@ -1,0 +1,255 @@
+{
+ "files": {
+  "wind_out": {
+   "kind": "loop"
+  },
+  "wind_in": {
+   "kind": "loop"
+  },
+  "rumble": {
+   "kind": "loop"
+  },
+  "drone": {
+   "kind": "loop"
+  },
+  "hum": {
+   "kind": "loop"
+  },
+  "breath": {
+   "kind": "loop"
+  },
+  "breath2": {
+   "kind": "loop"
+  },
+  "heart": {
+   "kind": "one"
+  },
+  "heart2": {
+   "kind": "one"
+  },
+  "steps": {
+   "kind": "set",
+   "items": [
+    "step0",
+    "step1",
+    "step2",
+    "step3",
+    "step4"
+   ]
+  },
+  "steps_soft": {
+   "kind": "set",
+   "items": [
+    "stepb0",
+    "stepb1",
+    "stepb2",
+    "stepb3",
+    "stepb4",
+    "stepb5"
+   ]
+  },
+  "crack": {
+   "kind": "one"
+  },
+  "debris": {
+   "kind": "one"
+  },
+  "debris2": {
+   "kind": "one"
+  },
+  "collapse": {
+   "kind": "one"
+  },
+  "collapse2": {
+   "kind": "one"
+  },
+  "boom": {
+   "kind": "one"
+  },
+  "bodyfall": {
+   "kind": "one"
+  },
+  "bodyfall2": {
+   "kind": "one"
+  },
+  "whoosh": {
+   "kind": "one"
+  },
+  "scream": {
+   "kind": "one"
+  },
+  "scream2": {
+   "kind": "one"
+  },
+  "growl": {
+   "kind": "one"
+  },
+  "growl2": {
+   "kind": "one"
+  },
+  "switch": {
+   "kind": "one"
+  },
+  "rocks": {
+   "kind": "one"
+  }
+ },
+ "credits": {
+  "wind_in": {
+   "id": 852822,
+   "title": "AMBUndr_Subterranean Howling Wind Loop_KOLBYR_FREE SOUNDS",
+   "url": "https://freesound.org/s/852822/",
+   "license": "CC0"
+  },
+  "rumble": {
+   "id": 638914,
+   "title": "Low Rumble - loopable ambiance",
+   "url": "https://freesound.org/s/638914/",
+   "license": "CC0"
+  },
+  "drone": {
+   "id": 527671,
+   "title": "creepy modular drone",
+   "url": "https://freesound.org/s/527671/",
+   "license": "CC0"
+  },
+  "hum": {
+   "id": 210994,
+   "title": "lamp harmonic hum",
+   "url": "https://freesound.org/s/210994/",
+   "license": "CC0"
+  },
+  "heart2": {
+   "id": 361143,
+   "title": "Heartbeat FX1 (loop)",
+   "url": "https://freesound.org/s/361143/",
+   "license": "CC0"
+  },
+  "steps": {
+   "id": 813622,
+   "title": "Footsteps - Stone, Rock, Concrete, Cement",
+   "url": "https://freesound.org/s/813622/",
+   "license": "CC0"
+  },
+  "steps2": {
+   "id": 554380,
+   "title": "ConcreteFootsteps.wav",
+   "url": "https://freesound.org/s/554380/",
+   "license": "CC0"
+  },
+  "crack": {
+   "id": 489905,
+   "title": "RockCrack03",
+   "url": "https://freesound.org/s/489905/",
+   "license": "CC0"
+  },
+  "debris": {
+   "id": 703247,
+   "title": "Big falling debris (crash)",
+   "url": "https://freesound.org/s/703247/",
+   "license": "CC0"
+  },
+  "collapse": {
+   "id": 712918,
+   "title": "building collapse / demolition",
+   "url": "https://freesound.org/s/712918/",
+   "license": "CC0"
+  },
+  "collapse2": {
+   "id": 721600,
+   "title": "Bakers house collapse",
+   "url": "https://freesound.org/s/721600/",
+   "license": "CC0"
+  },
+  "boom": {
+   "id": 476225,
+   "title": "Huge Distant Explosion",
+   "url": "https://freesound.org/s/476225/",
+   "license": "CC0"
+  },
+  "bodyfall": {
+   "id": 504626,
+   "title": "BODY FALL - V HVY - DIRT",
+   "url": "https://freesound.org/s/504626/",
+   "license": "CC0"
+  },
+  "bodyfall2": {
+   "id": 346695,
+   "title": "Body fall_01.wav",
+   "url": "https://freesound.org/s/346695/",
+   "license": "CC0"
+  },
+  "scream": {
+   "id": 792795,
+   "title": "Horror Possessed Scream",
+   "url": "https://freesound.org/s/792795/",
+   "license": "CC0"
+  },
+  "scream2": {
+   "id": 851828,
+   "title": "Horror Scream",
+   "url": "https://freesound.org/s/851828/",
+   "license": "CC0"
+  },
+  "growl": {
+   "id": 222523,
+   "title": "Deep Monster Growl",
+   "url": "https://freesound.org/s/222523/",
+   "license": "CC0"
+  },
+  "growl2": {
+   "id": 345732,
+   "title": "Deep Growl Echo 1.wav",
+   "url": "https://freesound.org/s/345732/",
+   "license": "CC0"
+  },
+  "breath": {
+   "id": 112557,
+   "title": "Frightened Breathing.aiff",
+   "url": "https://freesound.org/s/112557/",
+   "license": "CC0"
+  },
+  "wind_out": {
+   "id": 638434,
+   "title": "Cold Howling Wind/Breeze (Loopable)",
+   "url": "https://freesound.org/s/638434/",
+   "license": "CC0"
+  },
+  "heart": {
+   "id": 551437,
+   "title": "heartbeat.mp3",
+   "url": "https://freesound.org/s/551437/",
+   "license": "CC0"
+  },
+  "whoosh": {
+   "id": 842984,
+   "title": "FallingWhoosh3",
+   "url": "https://freesound.org/s/842984/",
+   "license": "CC0"
+  },
+  "debris2": {
+   "id": 703248,
+   "title": "Fall debris (crash)",
+   "url": "https://freesound.org/s/703248/",
+   "license": "CC0"
+  },
+  "breath2": {
+   "id": 757113,
+   "title": "Heavy Breathing",
+   "url": "https://freesound.org/s/757113/",
+   "license": "CC0"
+  },
+  "switch": {
+   "id": 348225,
+   "title": "Switch Light 05.wav",
+   "url": "https://freesound.org/s/348225/",
+   "license": "CC0"
+  },
+  "rocks": {
+   "id": 190505,
+   "title": "Rocks falling over rocks, over a steep hill, like a cliff.flac",
+   "url": "https://freesound.org/s/190505/",
+   "license": "CC0"
+  }
+ }
+}

@@ -1,0 +1,1585 @@
+<meta charset="utf-8">
+<title>VERTIGO</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=IBM+Plex+Mono:ital,wght@0,400;1,400&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #05070f; overflow: hidden; }
+  body { font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Courier New", monospace; color: #e8e2d0; }
+  canvas { display: block; touch-action: none; }
+  /* touch controls (shown only on touch devices) */
+  #touch { position: absolute; inset: 0; display: none; touch-action: none; pointer-events: none; }
+  #touch.on { display: block; }
+  .pad { position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); width: 134px; height: 134px; border-radius: 50%;
+    border: 1.5px solid rgba(242,199,119,0.35); background: rgba(5,7,15,0.35); pointer-events: none; }
+  .pad::before { content: ""; position: absolute; inset: 20px; border-radius: 50%; border: 1px dashed rgba(242,199,119,0.18); }
+  .pad .knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(242,199,119,0.5);
+    transition: transform 0.05s linear; }
+  .pad .lbl { position: absolute; left: 0; right: 0; bottom: -20px; text-align: center; font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(242,199,119,0.55); }
+  #padL { left: max(22px, env(safe-area-inset-left)); } #padR { right: max(22px, env(safe-area-inset-right)); }
+  .tbtn { position: absolute; width: 64px; height: 64px; border-radius: 50%; border: 1.5px solid rgba(242,199,119,0.5);
+    background: rgba(5,7,15,0.45); color: #f2c777; font: 11px/64px "IBM Plex Mono", Consolas, monospace; letter-spacing: 0.2em; text-align: center;
+    text-transform: uppercase; pointer-events: auto; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  .tbtn:active, .tbtn.down { background: rgba(242,199,119,0.35); }
+  #buse { left: calc(max(22px, env(safe-area-inset-left)) + 35px); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 160px); opacity: 0.35; }
+  #bjump { right: calc(max(22px, env(safe-area-inset-right)) + 35px); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 160px); }
+  #buse.live { opacity: 1; }
+  #zone { position: absolute; inset: 0; pointer-events: auto; }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #fs { position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 40px; height: 40px; z-index: 6;
+    border-radius: 8px; border: 1.5px solid rgba(242,199,119,0.45); background: rgba(5,7,15,0.5); color: #f2c777; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; opacity: 0.7; -webkit-tap-highlight-color: transparent; user-select: none; }
+  #fs:hover { opacity: 1; } #fs svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  #fs:focus-visible { outline: 2px solid #f2c777; }
+  #skiptap { position: fixed; top: 0; left: 0; width: 26vw; height: 18vh; z-index: 5; }
+  @media (max-width: 700px) {
+    #alt { left: 14px; bottom: 14px; font-size: 11px; } #alt b { font-size: 18px; }
+    #nerve { width: 80px; right: 14px; bottom: 120px; } #nervelbl { right: 14px; bottom: 128px; }
+    #msg { bottom: 24%; font-size: 14px; padding: 0 14vw; } #hint { bottom: 19%; }
+    #title h1 { letter-spacing: 0.4em; } #title .keys { font-size: 10px; padding: 0 6vw; } #title .warn { font-size: 10px; padding: 0 8vw; }
+    #end .line { font-size: 15px; padding: 0 10vw; }
+  }
+  body.touch #alt { top: max(18px, env(safe-area-inset-top)); bottom: auto; left: 16px; }
+  body.touch #nerve { top: calc(max(14px, env(safe-area-inset-top)) + 18px); bottom: auto; right: 66px; width: 90px; }
+  body.touch #nervelbl { top: calc(max(14px, env(safe-area-inset-top)) + 24px); bottom: auto; right: 66px; }
+  body.touch #hint { bottom: 27%; } body.touch #msg { bottom: 31%; }
+  #ui { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+  #title { pointer-events: auto; cursor: pointer; }
+  .fade { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity 0.8s ease; }
+  .vignette { position: absolute; inset: 0; opacity: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(0,0,0,0.92) 100%); }
+  #title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; transition: opacity 1.2s ease; text-align: center;
+    background: linear-gradient(180deg, rgba(5,7,15,0) 0%, rgba(5,7,15,0.35) 50%, rgba(5,7,15,0) 100%); }
+  @media (prefers-reduced-motion: reduce) { .go, #wind { animation: none !important; } #end .line, #end .tail { animation-duration: 0.01s; } }
+  #title h1 { font-family: "Cormorant Garamond", "Times New Roman", Georgia, serif; font-weight: 300; letter-spacing: 0.55em; font-size: clamp(44px, 9vw, 96px); margin: 0 0 0 0.55em; color: #f2c777; line-height: 1;
+    text-shadow: 0 0 40px rgba(255,170,60,0.35); }
+  #title .sub { letter-spacing: 0.3em; font-size: 12px; opacity: 0.6; text-transform: uppercase; }
+  #title .go { margin-top: 36px; font-size: 13px; letter-spacing: 0.2em; opacity: 0.85; animation: blink 2.4s ease-in-out infinite; }
+  #title .keys { font-size: 11px; opacity: 0.45; letter-spacing: 0.12em; line-height: 1.9; }
+  #title .warn { font-size: 11px; opacity: 0.4; letter-spacing: 0.1em; margin-top: 18px; max-width: 46ch; line-height: 1.6; }
+  @keyframes blink { 0%,100% { opacity: 0.35 } 50% { opacity: 0.95 } }
+  #msg { position: absolute; left: 0; right: 0; bottom: 18%; text-align: center; font-size: clamp(14px, 1.7vw, 19px);
+    letter-spacing: 0.08em; opacity: 0; transition: opacity 0.7s ease; padding: 0 8vw; line-height: 1.6;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.9); }
+  #msg.note { font-style: italic; color: #d9d2bd; }
+  #msg.speech { color: #f4e6cc; font-size: clamp(16px, 1.9vw, 22px); letter-spacing: 0.04em; text-shadow: 0 2px 14px rgba(0,0,0,1); }
+  #msg.speech::before { content: "“"; opacity: 0.6; } #msg.speech::after { content: "”"; opacity: 0.6; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font-size: 12px; letter-spacing: 0.2em;
+    opacity: 0; transition: opacity 0.4s; text-transform: uppercase; color: #f2c777; }
+  #alt { position: absolute; left: 22px; bottom: 20px; font-size: 13px; letter-spacing: 0.15em; opacity: 0.7; line-height: 1.7; }
+  #lights { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; gap: 8px; }
+  #lights i { display: block; width: 9px; height: 13px; border-radius: 2px; background: #fff3d6; box-shadow: 0 0 10px rgba(255,220,150,0.7); transition: background 1s, box-shadow 1s; }
+  #lights i.done { background: #2a2520; box-shadow: none; }
+  #startover { pointer-events: auto; cursor: pointer; font-size: 11px; letter-spacing: 0.25em; opacity: 0.45; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; display: none; }
+  #startover:hover { opacity: 0.9; }
+  #alt b { font-weight: 400; font-size: 22px; color: #f2c777; }
+  #nerve { position: absolute; right: 22px; bottom: 26px; width: 120px; height: 2px; background: rgba(255,255,255,0.12); }
+  #nerve i { display: block; height: 100%; width: 100%; background: #f2c777; transform-origin: right; transition: background 0.4s; }
+  #nervelbl { position: absolute; right: 22px; bottom: 34px; font-size: 10px; letter-spacing: 0.25em; opacity: 0.5; text-transform: uppercase; }
+  #reticle { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; border-radius: 50%;
+    background: rgba(255,255,255,0.55); }
+  #wind { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 13px; letter-spacing: 0.5em;
+    text-transform: uppercase; opacity: 0; color: #cfd8ff; }
+  #wind.on { animation: blink 0.8s ease-in-out infinite; }
+  #pause { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+    gap: 10px; background: rgba(0,0,0,0.55); font-size: 13px; letter-spacing: 0.25em; text-transform: uppercase; }
+  #end { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+    gap: 22px; text-align: center; background: #000; z-index: 4; }
+  #end .line { margin: 0; font-size: clamp(16px, 2vw, 24px); letter-spacing: 0.12em; color: #d9d2bd; opacity: 0; animation: appear 2.2s ease forwards; }
+  #end .tail { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 40px; opacity: 0; animation: appear 3s ease forwards; }
+  @keyframes appear { to { opacity: 1 } }
+  #end h1 { font-family: "Cormorant Garamond", "Times New Roman", Georgia, serif; font-weight: 300; letter-spacing: 0.55em; margin: 0 0 0 0.55em; font-size: clamp(40px, 8vw, 84px); color: #f2c777; line-height: 1; }
+  #end .stat { font-size: 13px; letter-spacing: 0.18em; opacity: 0.75; line-height: 2; }
+  #end .go { font-size: 12px; letter-spacing: 0.25em; opacity: 0.6; margin-top: 24px; animation: blink 2.4s ease-in-out infinite; }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px;
+    letter-spacing: 0.3em; opacity: 0.5; text-transform: uppercase; }
+  .hidden { opacity: 0 !important; }
+</style>
+
+<canvas id="c"></canvas>
+<button id="fs" title="full screen" aria-label="full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+<div id="touch">
+  <div id="zone"></div>
+  <div id="skiptap"></div>
+  <div class="pad" id="padL"><div class="knob"></div><div class="lbl">move</div></div>
+  <div class="pad" id="padR"><div class="knob"></div><div class="lbl">look</div></div>
+  <div class="tbtn" id="buse">use</div>
+  <div class="tbtn" id="bjump">jump</div>
+</div>
+<div id="ui">
+  <div id="flash"></div>
+  <div id="reticle" class="hidden"></div>
+  <div id="wind">wind</div>
+  <div id="alt" class="hidden"><b>0</b> m<br><span id="lap"></span></div>
+  <div id="lights" class="hidden"><i></i><i></i><i></i></div>
+  <div id="nervelbl" class="hidden">nerve</div>
+  <div id="nerve" class="hidden"><i></i></div>
+  <div class="vignette" id="vig"></div>
+  <div id="msg"></div>
+  <div id="hint"></div>
+  <div id="pause"><div>paused</div><div style="opacity:.5">click to resume</div></div>
+  <div id="end">
+    <p class="line" style="animation-delay: 0.8s">The tower is down.</p>
+    <p class="line" style="animation-delay: 4.2s">No one will have to look up at it.</p>
+    <p class="line" style="animation-delay: 7.6s">No one will have to climb it.</p>
+    <p class="line" style="animation-delay: 11.4s">Go home.</p>
+    <div class="tail" style="animation-delay: 15s">
+      <h1>VERTIGO</h1>
+      <div class="stat" id="endstat"></div>
+      <div class="go">press R — there is always another tower</div>
+    </div>
+  </div>
+  <div class="fade" id="fade"></div>
+  <div id="title">
+    <h1>VERTIGO</h1>
+    <div class="sub">a tower, at night</div>
+    <div class="go" id="clickgo">click to begin</div>
+    <div id="startover">start over</div>
+    <div class="keys" id="keysline">WASD move &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; space jump &nbsp;·&nbsp; shift creep &nbsp;·&nbsp; E use &nbsp;·&nbsp; [ ] sensitivity</div>
+    <div class="warn">Contains heights, no railings, and a camera that does not always help. Headphones recommended.</div>
+  </div>
+  <div id="loading">loading</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>
+// ============================================================================
+//  VERTIGO — a first-person climb of one tower, at night.
+//  Tower geometry authored in Blender (build_tower.py) and inlined below as GLB.
+//  Blender is Z-up; here (three.js) y is up:  three(x, y, z) = blender(x, z, -y)
+// ============================================================================
+const LAYOUT = __LAYOUT__;
+const GLB_B64 = "__GLB_B64__";
+
+const $ = id => document.getElementById(id);
+const fail = msg => { const l = $('loading'); l.style.display = 'flex'; l.style.opacity = 1; l.style.zIndex = 5; l.textContent = msg; };
+addEventListener('error', e => { if (typeof G !== 'undefined' && G.state === 'loading') fail('could not start: ' + (e.message || e.type)); });
+if (!window.THREE) fail('three.js did not load (check the network / script blocker)');
+else if (!THREE.GLTFLoader) fail('the model loader did not load (check the network / script blocker)');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => t * t * (3 - 2 * t);
+const TOWER_H = LAYOUT.H;              // 71 m
+const A = LAYOUT.A, B = LAYOUT.B;      // shaft half-width, outer half-width
+const EYE = 1.6, RADIUS = 0.32, STEP = 0.55;
+const SHOT = { x: 3.2, z: B + 3.1, yaw: -0.45, pitch: 1.15, roll: -0.2 };   // the photo: at the foot of the face, looking up along the corner
+
+// ---------------------------------------------------------------- deterministic pattern per ascent
+function hash(i, s) { let h = (i * 374761393 + s * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+
+// slab flags for a given ascent: gaps (missing) and crumble slabs
+function buildPattern(ascent) {
+  const n = LAYOUT.slabs.length, gap = new Array(n).fill(false), crumble = new Array(n).fill(false);
+  const laps = Math.floor(n / 16);
+  const cfg = { 1: { gapFrom: 2, gaps: 1, crFrom: 5, crs: 1 }, 2: { gapFrom: 1, gaps: 2, crFrom: 2, crs: 2 }, 3: { gapFrom: 1, gaps: 2, crFrom: 1, crs: 3 } }[ascent] || { gapFrom: 1, gaps: 3, crFrom: 1, crs: 3 };
+  if (IS_TOUCH) { cfg.gaps = 0; cfg.crs += 1; cfg.crFrom = Math.min(cfg.crFrom, 3); }   // phones: no jump puzzles - more crumbling slabs instead
+  for (let lap = 1; lap < laps; lap++) {
+    // candidates: positions 1..3 on each wall except the slab right after a landing; keep the last 6 slabs clean
+    let cands = [];
+    for (let k = 1; k < 16; k++) { const i = lap * 16 + k; if (k === 1 || i >= n - 10) continue; cands.push(i); }
+    cands.sort((a, b) => hash(a, ascent * 7 + 1) - hash(b, ascent * 7 + 1));
+    const ok = i => !gap[i] && !crumble[i] && !gap[i - 1] && !gap[i + 1] && !crumble[i - 1] && !crumble[i + 1];
+    let g = 0, c = 0;
+    for (const i of cands) {
+      if (lap >= cfg.gapFrom && g < cfg.gaps && ok(i)) { gap[i] = true; g++; continue; }
+      if (lap >= cfg.crFrom && c < cfg.crs && ok(i) && (i % 4) !== 3) { crumble[i] = true; c++; }
+    }
+    // ascent 3: a crumble slab right before a gap, once per lap — commit before it goes
+    if (ascent >= 3) for (const i of cands) if (gap[i] && !crumble[i - 1] && !gap[i - 1] && (i - 1) % 16 !== 0 && (i - 1) % 16 !== 1) { crumble[i - 1] = true; break; }
+  }
+  return { gap, crumble };
+}
+
+// ---------------------------------------------------------------- narrative
+const LINES = {
+  start: { 1: ["You don't remember the walk here.", "The lights at the top. That's why you came.", "Find the door."],
+           2: ["You don't remember the first laps.", "Something is coming up the stairs.", "Don't stop."],
+           3: ["You have never left.", "It's faster now.", "Put them out."] },
+  notes: { 1: { 2: "someone counted the steps here. the number is scratched out.",
+                4: "don't look down. i know. i know.",
+                6: "the windows are lower than they were.",
+                8: "i can hear whoever is below me. it sounds like me.",
+                10: "the lights are not for us." },
+           2: { 5: "the wind comes from the inside.",
+                7: "it doesn't get tired. i do.",
+                9: "the roof is not the end. i was wrong about that." },
+           3: { 8: "it's you. it was always you, coming up behind.",
+                10: "last lap. don't look down. look down. it doesn't matter anymore." } },
+  roof: { 1: "The roof. The wind. The three lights.", 2: "The roof again. They're brighter.", 3: "They are waiting." },
+  mast: { 1: ["They're brighter than they looked from below.", "Much brighter."],
+          2: ["You can see the ground from here. You can see someone standing at the door.", "They are looking up."] },
+  fall: ["You don't remember hitting the ground.", "The stairs again. You never hit anything.", "Nothing. Then the stairs."],
+  thrown: ["It threw you.", "It reached you. Then the air.", "Its hands. Then nothing."],
+  roofThrow: ["Over the edge. You don't remember the ground.", "Again. You don't remember the ground."],
+};
+
+// ---------------------------------------------------------------- audio (all procedural)
+const Audio = {
+  ctx: null, master: null, wind: null, windGain: null, hum: null, heart: 0, gustGain: null, samples: null, loops: {},
+  // ---- recorded sound: CC0 samples in ./sfx, fetched and decoded before the title lets you in. If they cannot load (file://), the synth below carries on.
+  async preload(onProgress) {
+    try {
+      const man = await (await fetch('sfx/manifest.json', { cache: 'force-cache' })).json();
+      const names = []; for (const [k, v] of Object.entries(man.files)) { if (v.kind === 'set') names.push(...v.items); else names.push(k); }
+      const C = this.ctx || (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      const out = {}; let done = 0;
+      await Promise.all(names.map(async n => { const ab = await (await fetch(`sfx/${n}.ogg`, { cache: 'force-cache' })).arrayBuffer();
+        out[n] = await new Promise((res, rej) => C.decodeAudioData(ab, res, rej)); done++; onProgress && onProgress(done, names.length); }));
+      this.samples = out; this.manifest = man; return true;
+    } catch (e) { console.warn('samples unavailable, using the synth', e); this.samples = null; return false; }
+  },
+  play(name, vol = 1, rate = 1, opts = {}) {   // one-shot from the sample set; returns the gain node so it can be shaped
+    if (!this.master || !this.samples || !this.samples[name]) return null; const C = this.ctx;
+    const src = C.createBufferSource(); src.buffer = this.samples[name]; src.playbackRate.value = rate;
+    const g = C.createGain(); g.gain.value = vol; let node = src;
+    if (opts.lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opts.lowpass; node.connect(f); node = f; }
+    node.connect(g); g.connect(this.master); src.start(C.currentTime, opts.offset || 0); return g;
+  },
+  pick(set) { const it = this.manifest.files[set].items; return it[Math.floor(Math.random() * it.length)]; },
+  loop(name, rate = 1, lowpass = 0) {   // a looping bed with its own gain, started silent
+    const C = this.ctx, src = C.createBufferSource(); src.buffer = this.samples[name]; src.loop = true; src.playbackRate.value = rate;
+    const g = C.createGain(); g.gain.value = 0; let node = src;
+    if (lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node.connect(f); node = f; }
+    node.connect(g); g.connect(this.master); src.start(C.currentTime, Math.random() * (src.buffer.duration - 1)); return { src, g };
+  },
+  init() {
+    if (this.master) return;
+    const C = this.ctx || (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    this.master = C.createGain(); this.master.gain.value = this.samples ? 0.7 : 0.55; this.master.connect(C.destination);
+    if (this.samples) {   // the recorded beds
+      this.loops.windOut = this.loop('wind_out'); this.loops.windIn = this.loop('wind_in'); this.loops.hum = this.loop('hum');
+      this.loops.fig = this.loop('rumble', 0.8, 260); this.loops.col = this.loop('rumble', 1.0, 400); this.loops.drone = this.loop('drone');
+      this.loops.breath = this.loop('breath'); this.loops.breath2 = this.loop('breath2');
+    }
+    // wind: noise -> bandpass -> gain
+    const buf = C.createBuffer(1, C.sampleRate * 4, C.sampleRate);
+    const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+    const src = C.createBufferSource(); src.buffer = buf; src.loop = true;
+    const bp = C.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 380; bp.Q.value = 0.6;
+    this.windFilter = bp;
+    this.windGain = C.createGain(); this.windGain.gain.value = 0.0;
+    src.connect(bp); bp.connect(this.windGain); this.windGain.connect(this.master); src.start();
+    // gust layer: higher, whistlier
+    const src2 = C.createBufferSource(); src2.buffer = buf; src2.loop = true;
+    const bp2 = C.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 900; bp2.Q.value = 2.5; this.gustFilter = bp2;
+    this.gustGain = C.createGain(); this.gustGain.gain.value = 0;
+    src2.connect(bp2); bp2.connect(this.gustGain); this.gustGain.connect(this.master); src2.start();
+    // hum: sodium lamp drone
+    const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 50;
+    const lp = C.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140;
+    this.humGain = C.createGain(); this.humGain.gain.value = 0.0;
+    o.connect(lp); lp.connect(this.humGain); this.humGain.connect(this.master); o.start();
+    // the figure: noise through a very low filter, pulsed per frame
+    const src4 = C.createBufferSource(); src4.buffer = buf; src4.loop = true;
+    const lp4 = C.createBiquadFilter(); lp4.type = 'lowpass'; lp4.frequency.value = 52; lp4.Q.value = 1.4;
+    this.figGain = C.createGain(); this.figGain.gain.value = 0;
+    src4.connect(lp4); lp4.connect(this.figGain); this.figGain.connect(this.master); src4.start(C.currentTime, 1.3);
+    // rumble bed for the collapse
+    const src3 = C.createBufferSource(); src3.buffer = buf; src3.loop = true;
+    const lp3 = C.createBiquadFilter(); lp3.type = 'lowpass'; lp3.frequency.value = 70; lp3.Q.value = 1.2;
+    this.rumbleGain = C.createGain(); this.rumbleGain.gain.value = 0;
+    src3.connect(lp3); lp3.connect(this.rumbleGain); this.rumbleGain.connect(this.master); src3.start();
+  },
+  rumbleLevel(v) { if (!this.master) return; if (this.loops.col) this.loops.col.g.gain.setTargetAtTime(v * 1.1, this.ctx.currentTime, 0.2); else this.rumbleGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.2); },
+  drone(level, freq) {   // the recorded drone rises in pitch with the sway; the synth is two detuned sines
+    if (!this.master) return; const C = this.ctx;
+    if (this.loops.drone) { this.loops.drone.g.gain.setTargetAtTime(level * 0.9, C.currentTime, 0.4); this.loops.drone.src.playbackRate.setTargetAtTime(freq / 55, C.currentTime, 0.5); return; }
+    if (!this.droneGain) { this.droneGain = C.createGain(); this.droneGain.gain.value = 0; this.droneGain.connect(this.master);
+      this.droneOsc = [C.createOscillator(), C.createOscillator()]; this.droneOsc.forEach((o, i) => { o.type = i ? 'triangle' : 'sine'; o.connect(this.droneGain); o.start(); }); }
+    this.droneGain.gain.setTargetAtTime(level, C.currentTime, 0.4);
+    this.droneOsc[0].frequency.setTargetAtTime(freq, C.currentTime, 0.5); this.droneOsc[1].frequency.setTargetAtTime(freq * 1.04, C.currentTime, 0.5);
+  },
+  fadeOut(dur) { if (!this.ctx) return; const t = this.ctx.currentTime; this.master.gain.cancelScheduledValues(t); this.master.gain.setValueAtTime(this.master.gain.value, t); this.master.gain.linearRampToValueAtTime(0, t + dur); this.faded = true; },
+  hush(dur) { if (!this.ctx) return; const t = this.ctx.currentTime; this.master.gain.cancelScheduledValues(t); this.master.gain.setTargetAtTime(0.0, t, 0.05); this.master.gain.setTargetAtTime(0.55, t + dur, 0.15); },
+  scream(on) { if (!this.ctx) return; const t = this.ctx.currentTime; this.gustFilter.frequency.setTargetAtTime(on ? 1800 : 900, t, 1.5); this.gustFilter.Q.setTargetAtTime(on ? 6 : 2.5, t, 0.5); },
+  impact() { if (this.samples) { this.play('boom', 1.0, 0.9 + Math.random() * 0.2); this.play(Math.random() < 0.5 ? 'debris' : 'debris2', 0.8); return; }
+    this.tone(30, 1.8, 1.6, 'sine', 0.3); this.burst(120, 0.6, 1.4, 1.4, 'lowpass'); this.burst(900, 0.8, 0.5, 0.6); },
+  whoosh() { if (this.samples) this.play('whoosh', 0.45, 0.95 + Math.random() * 0.1); else this.burst(500, 0.6, 1.6, 0.35); },
+  rocks() { if (this.samples) this.play('rocks', 0.8, 0.9 + Math.random() * 0.2); },
+  collapseHit() { if (this.samples) { this.play(Math.random() < 0.5 ? 'collapse' : 'collapse2', 1.0); this.play('rocks', 0.6); } },
+  burst(freq, q, dur, vol, type = 'bandpass') {
+    if (!this.master) return; const C = this.ctx;
+    const s = C.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
+    const f = C.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = C.createGain(); g.gain.setValueAtTime(vol, C.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, C.currentTime + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(C.currentTime, Math.random() * 3); s.stop(C.currentTime + dur + 0.05);
+  },
+  tone(freq, dur, vol, type = 'sine', slide = 1) {
+    if (!this.master) return; const C = this.ctx;
+    const o = C.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, C.currentTime);
+    o.frequency.exponentialRampToValueAtTime(freq * slide, C.currentTime + dur);
+    const g = C.createGain(); g.gain.setValueAtTime(vol, C.currentTime); g.gain.exponentialRampToValueAtTime(0.001, C.currentTime + dur);
+    o.connect(g); g.connect(this.master); o.start(); o.stop(C.currentTime + dur + 0.05);
+  },
+  step(hard, soft) {   // recorded concrete footsteps; the synth is a soft low thud
+    if (this.samples) { this.play(this.pick(soft ? 'steps_soft' : 'steps'), hard ? 0.9 : soft ? 0.35 : 0.55, 0.92 + Math.random() * 0.16, { lowpass: 3800 }); return; }
+    const f = (hard ? 60 : 52) + Math.random() * 6; this.tone(f, hard ? 0.18 : 0.15, hard ? 0.6 : 0.38, 'sine', 0.45);
+    this.burst(200, 0.7, 0.08, hard ? 0.18 : 0.1, 'lowpass'); this.burst(2600, 1.0, 0.025, 0.015); },
+  figLevel(level, t) {   // a deep pulsing rumble, like something heavy on the stairs; growls when it is close
+    if (!this.master) return; const pulse = 0.35 + 0.65 * Math.pow(Math.abs(Math.sin(t * 3.1)), 3);
+    if (this.loops.fig) { this.loops.fig.g.gain.setTargetAtTime(level * pulse * 1.2, this.ctx.currentTime, 0.06);
+      this.growlT = (this.growlT ?? 3) - 1 / 60; if (level > 0.3 && this.growlT <= 0) { this.growlT = 4 + Math.random() * 6; this.play(Math.random() < 0.5 ? 'growl' : 'growl2', level * 0.6, 0.8 + Math.random() * 0.3); } return; }
+    if (!this.figGain) return;
+    this.figGain.gain.setTargetAtTime(level * pulse, this.ctx.currentTime, 0.06);
+    this.tickT = (this.tickT ?? 1) - 1 / 60;
+    if (level > 0.08 && this.tickT <= 0) { this.tickT = 0.9 + Math.random() * 2.2; const n = 3 + Math.floor(Math.random() * 5), v = Math.min(1, level * 1.6);
+      for (let i = 0; i < n; i++) setTimeout(() => { this.burst(1500 + Math.random() * 900, 4, 0.028, v * 0.5); this.tone(180 + Math.random() * 60, 0.05, v * 0.25, 'square', 0.6); }, i * (55 + Math.random() * 45)); } },
+  breath(vol) { if (this.samples) return; this.burst(260, 0.5, 0.9, vol * 0.22, 'lowpass'); },
+  grab() { if (this.samples) { this.play('growl2', 1.0, 0.75); } this.burst(90, 0.8, 1.2, 1.0, 'lowpass'); },
+  scream() {   // a recorded scream over a growl; the synth is two detuned saws and a shriek
+    if (!this.ctx) return; const C = this.ctx, t = C.currentTime;
+    if (this.samples) { const two = Math.random() < 0.5; this.play(two ? 'scream2' : 'scream', two ? 0.32 : 0.5, 0.95 + Math.random() * 0.1); this.play('growl', 0.6, 0.7); this.burst(70, 0.8, 1.4, 1.0, 'lowpass'); return; }
+    for (const [f0, f1, det] of [[820, 230, 1], [830, 236, 1.01]]) { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * det, t); o.frequency.exponentialRampToValueAtTime(f1 * det, t + 0.55);
+      const bp = C.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.2;
+      const g = C.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.04); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      o.connect(bp); bp.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.75); }
+    this.burst(2600, 1.4, 0.5, 1.0); this.burst(70, 0.8, 1.4, 1.2, 'lowpass'); },
+  heartbeat(v = 1) {   // a recorded beat (two takes, alternated) with the blood surging past your ears under it
+    if (this.samples) { this.beatN = (this.beatN || 0) + 1; this.play(this.beatN % 2 ? 'heart' : 'heart2', Math.min(1.4, v * 1.1), 0.95 + Math.random() * 0.08); }
+    else { this.tone(48, 0.16, 0.9 * v, 'sine', 0.55); setTimeout(() => this.tone(44, 0.2, 0.7 * v, 'sine', 0.5), 160); }
+    this.burst(260, 0.5, 0.42, 0.4 * v, 'lowpass'); vigPulse = 1; },
+  breathe(level) {   // inhale then exhale; shallower and faster as it climbs, a catch in it at the top
+    const gasp = level > 0.7; const inh = () => { this.burst(gasp ? 900 : 650, 1.6, gasp ? 0.16 : 0.32, 0.22 * level); if (gasp) setTimeout(() => this.burst(1000, 1.6, 0.12, 0.18 * level), 130); };
+    inh(); setTimeout(() => this.burst(380, 1.2, gasp ? 0.28 : 0.5, 0.2 * level, 'bandpass'), lerp(1300, 450, level)); },
+  panic(level, dt) {   // the whole body reacting: called every frame
+    if (!this.master) return;
+    this.heartT = (this.heartT ?? 0) - dt; this.breathT = (this.breathT ?? 0) - dt;
+    if (level > 0.12 && this.heartT <= 0) { this.heartT = lerp(1.05, 0.4, clamp((level - 0.12) / 0.88, 0, 1)); this.heartbeat(0.25 + 1.55 * level * level); }   // quiet at first, pounding at the top
+    if (this.loops.breath) {   // recorded breathing: frightened take fades in with panic, the heavy take on top when it peaks; both quicken
+      const t = this.ctx.currentTime, k = clamp((level - 0.15) / 0.85, 0, 1);
+      this.loops.breath.g.gain.setTargetAtTime(k * 0.8, t, 0.5); this.loops.breath.src.playbackRate.setTargetAtTime(0.95 + 0.3 * k, t, 0.5);
+      this.loops.breath2.g.gain.setTargetAtTime(Math.max(0, k - 0.55) * 1.4, t, 0.5); this.loops.breath2.src.playbackRate.setTargetAtTime(1.0 + 0.25 * k, t, 0.5); return; }
+    if (level > 0.18 && this.breathT <= 0) { this.breathT = lerp(3.2, 1.05, clamp((level - 0.18) / 0.82, 0, 1)); this.breathe(level); } },
+  crack() { if (this.samples) { this.play('crack', 1.0, 0.9 + Math.random() * 0.2); return; } this.burst(2400, 0.8, 0.12, 0.5); this.burst(160, 1.0, 1.1, 0.7, 'lowpass'); },
+  rumble() { if (this.samples) { this.play(Math.random() < 0.5 ? 'debris' : 'debris2', 0.9, 0.85 + Math.random() * 0.2); return; } this.burst(110, 0.8, 1.6, 0.9, 'lowpass'); },
+  thud() { if (this.samples) { this.play(Math.random() < 0.5 ? 'bodyfall' : 'bodyfall2', 0.9, 0.9 + Math.random() * 0.2); return; } this.tone(40, 0.5, 1.2, 'sine', 0.4); this.burst(200, 0.7, 0.4, 0.8, 'lowpass'); },
+  click() { if (this.samples) { this.play('switch', 0.9, 0.95 + Math.random() * 0.1); return; } this.burst(3000, 1.5, 0.05, 0.6); this.tone(1800, 0.06, 0.2, 'square', 0.5); },
+  flare() { this.tone(220, 2.5, 0.35, 'sine', 4); this.tone(330, 2.5, 0.2, 'triangle', 3); },
+  off() { this.tone(900, 0.5, 0.4, 'sine', 0.05); this.click(); },
+  set(wind, gust, hum) {
+    if (!this.master) return; const t = this.ctx.currentTime;
+    if (this.loops.windOut) {   // outside: the open wind; inside: the shaft howl, with a little of the outside leaking in
+      const inside = P.inside && !P.onRoof;
+      this.loops.windOut.g.gain.setTargetAtTime(wind * (inside ? 0.25 : 1.0) * 1.6, t, 0.25); this.loops.windIn.g.gain.setTargetAtTime(wind * (inside ? 1.0 : 0.15) * 1.6, t, 0.25);
+      this.loops.hum.g.gain.setTargetAtTime(hum * 2.2, t, 0.3); this.windGain.gain.setTargetAtTime(wind * 0.25, t, 0.15);
+    } else { this.windGain.gain.setTargetAtTime(wind, t, 0.15); this.humGain.gain.setTargetAtTime(hum, t, 0.3); }
+    this.gustGain.gain.setTargetAtTime(gust * (this.samples ? 0.6 : 1), t, 0.1);
+  },
+};
+
+// ---------------------------------------------------------------- renderer / scene
+let renderer; try { renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' }); }
+catch (e) { fail('WebGL is not available in this browser/frame: ' + e.message); throw e; }
+const IS_TOUCH = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && matchMedia('(pointer: coarse)').matches;
+if (IS_TOUCH) { document.body.classList.add('touch'); $('touch').classList.add('on'); $('clickgo').textContent = 'tap to begin';
+  $('keysline').innerHTML = 'left pad: move &nbsp;·&nbsp; right pad: look &nbsp;·&nbsp; jump / use buttons &nbsp;·&nbsp; gaps: just keep running'; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.0 : 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // everything that casts is static: render the maps once after load
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
+
+// per-pixel, non-specular material (Lambert is vertex-lit and the tower walls are single 70 m quads)
+const matte = opts => new THREE.MeshPhongMaterial({ specular: 0x000000, shininess: 1, ...opts });
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070f);
+scene.fog = new THREE.FogExp2(new THREE.Color(0x0a0d1c).convertSRGBToLinear().getHex(), 0.0026);   // fog colour is used in linear light
+// the sky: light-polluted warm brown at the horizon, blue-black overhead; a dome that follows the camera
+const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 12), new THREE.ShaderMaterial({
+  uniforms: { top: { value: new THREE.Color(0x020309).convertSRGBToLinear() }, mid: { value: new THREE.Color(0x070c1c).convertSRGBToLinear() }, horizon: { value: new THREE.Color(0x2a1b10).convertSRGBToLinear() }, glow: { value: 1.0 } },   // linear: the final pass converts to sRGB
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 top, mid, horizon; uniform float glow; varying vec3 vP; void main(){ float h = clamp(vP.y, -0.05, 1.0); vec3 c = mix(mid, top, smoothstep(0.03, 0.5, h)); c = mix(horizon * glow, c, smoothstep(-0.01, 0.09, h)); gl_FragColor = vec4(c, 1.0); }',
+  side: THREE.BackSide, depthWrite: false, fog: false }));
+sky.renderOrder = -10; scene.add(sky);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.08, 1500);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+let sizedW = innerWidth, sizedH = innerHeight;
+function fitCanvas() { sizedW = innerWidth; sizedH = innerHeight; if (!sizedW || !sizedH) return; camera.aspect = sizedW / sizedH; camera.updateProjectionMatrix(); renderer.setSize(sizedW, sizedH); if (window.composer) composer.setSize(sizedW, sizedH); }
+// post: bloom on the lamps, then one grade pass - vignette, grain, chromatic aberration and a radial smear that follow vertigo and panic
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, aberr: { value: 0.0 }, smear: { value: 0.0 }, grain: { value: 0.05 }, vig: { value: 0.55 }, pulse: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, aberr, smear, grain, vig, pulse; varying vec2 vUv;
+    float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 7.1) * 43758.5453); }
+    void main(){
+      vec2 c = vUv - 0.5; float r = length(c); vec2 dir = c / max(r, 1e-4);
+      // radial smear (falling, the topple): a few taps along the radius
+      vec3 col = vec3(0.0); float wsum = 0.0;
+      for (int i = 0; i < 6; i++) { float k = float(i) / 5.0; vec2 uv = vUv - dir * r * smear * 0.12 * k; float w = 1.0 - k * 0.5;
+        // chromatic aberration grows toward the edges
+        float ab = aberr * r;
+        col += vec3(texture2D(tDiffuse, uv + dir * ab).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - dir * ab).b) * w; wsum += w; }
+      col /= wsum;
+      // grade: cool shadows, sodium highlights
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, col * vec3(0.9, 0.96, 1.14), (1.0 - smoothstep(0.0, 0.08, lum)) * 0.25);
+      col = mix(col, col * vec3(1.07, 0.99, 0.88), smoothstep(0.15, 0.9, lum) * 0.35);
+      // grain, vignette, a pulse of pressure at the edges with the heart
+      col += (rnd(vUv * vec2(1920.0, 1080.0)) - 0.5) * grain * (0.15 + lum);   // grain lives in the mid-tones, not the blacks
+      float v = smoothstep(0.35, 1.05, r * (1.0 + pulse * 0.25)); col *= 1.0 - v * vig;
+      gl_FragColor = LinearTosRGB(vec4(col, 1.0)); }`,   // the buffer is linear; this pass puts it on screen
+};
+let composer = null, bloomPass = null, gradePass = null;
+try {
+  composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  if (!IS_TOUCH) { bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth || 1280, innerHeight || 720), 0.32, 0.4, 0.6); composer.addPass(bloomPass); }   // threshold is in linear light
+  gradePass = new THREE.ShaderPass(GradeShader); composer.addPass(gradePass);
+  window.composer = composer;
+} catch (e) { console.warn('post-processing unavailable', e); composer = null; }
+addEventListener('resize', fitCanvas);
+
+// --- lights
+scene.add(new THREE.HemisphereLight(0x22305a, 0x1a120a, 0.3));
+scene.add(new THREE.AmbientLight(0x2c2218, 0.28));
+
+// sodium floods at the base, aimed up the faces (that orange-from-below wash in the photo)
+function sodiumFlood(x, z, tx, tz) {
+  const s = new THREE.SpotLight(0xffa242, 1.6, 85, Math.PI / 5, 0.55, 1.2);
+  s.position.set(x, 0.4, z); s.target.position.set(tx, 45, tz); scene.add(s); scene.add(s.target);
+  s.castShadow = true; s.shadow.mapSize.set(1024, 1024); s.shadow.camera.near = 1; s.shadow.camera.far = 90; s.shadow.bias = -0.0005;
+}
+sodiumFlood(-7, B + 9, -1, B); sodiumFlood(9, B + 7, B, 0); sodiumFlood(-9, -B - 7, -B, 0); sodiumFlood(8, -B - 8, 0, -B);
+sodiumFlood(B + 9, -5, B, 0);
+
+// --- ground + far city
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), matte({ color: 0x07080c }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.01; ground.receiveShadow = true; scene.add(ground);
+
+let cityPts = null, cityBase = null; const streetHeads = [];
+{ // distant blocks
+  const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+  const m = matte({ color: 0x0a0b12 });
+  for (let i = 0; i < 90; i++) {
+    const r = 70 + hash(i, 3) * 380, a = hash(i, 4) * Math.PI * 2;
+    const b = new THREE.Mesh(geo, m);
+    b.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    b.scale.set(8 + hash(i, 5) * 22, 4 + hash(i, 6) * hash(i, 7) * 26, 8 + hash(i, 8) * 22);
+    b.rotation.y = hash(i, 9) * Math.PI; scene.add(b);
+  }
+  // scattered sodium points on the ground far away, plus lit windows on the blocks
+  const blocks = []; scene.traverse(o => { if (o.isMesh && o.geometry === geo) blocks.push(o); });
+  const NG = 900, NW = 1100, N = NG + NW, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  for (let i = 0; i < NG; i++) {
+    const r = 40 + Math.pow(hash(i, 11), 0.7) * 520, a = hash(i, 12) * Math.PI * 2;
+    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = 0.5 + hash(i, 13) * hash(i, 14) * 14; pos[i * 3 + 2] = Math.sin(a) * r;
+    const w = hash(i, 15) < 0.75; col[i * 3] = w ? 1.0 : 0.85; col[i * 3 + 1] = w ? 0.62 : 0.9; col[i * 3 + 2] = w ? 0.22 : 1.0;
+  }
+  const _v = new THREE.Vector3();
+  for (let i = NG; i < N; i++) {
+    const b = blocks[Math.floor(hash(i, 41) * blocks.length)]; const side = hash(i, 42) < 0.5 ? -1 : 1, onX = hash(i, 43) < 0.5;
+    _v.set(onX ? side * 0.505 : hash(i, 44) - 0.5, 0.08 + hash(i, 45) * 0.88, onX ? hash(i, 46) - 0.5 : side * 0.505); b.updateMatrixWorld(); _v.applyMatrix4(b.matrixWorld);
+    pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z;
+    const w = hash(i, 47) < 0.6; col[i * 3] = w ? 1.0 : 0.8; col[i * 3 + 1] = w ? 0.78 : 0.86; col[i * 3 + 2] = w ? 0.45 : 1.0;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  cityPts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: true, fog: false, transparent: true, opacity: 0.9 })); scene.add(cityPts);
+  cityBase = col.slice();
+  // stars
+  const S = 700, sp = new Float32Array(S * 3);
+  for (let i = 0; i < S; i++) { const a = hash(i, 21) * Math.PI * 2, e = Math.asin(hash(i, 22)); const r = 1200;
+    sp[i * 3] = Math.cos(a) * Math.cos(e) * r; sp[i * 3 + 1] = Math.sin(e) * r; sp[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.2, color: 0xdde4ff, fog: false, transparent: true, opacity: 0.7 })));
+}
+
+// halos: an additive glow sprite on every lamp (the bloom does the rest on desktop; this carries phones)
+const haloTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  const g = c.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,0.55)'); g.addColorStop(0.5, 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(cv); })();
+function halo(x, y, z, color, size, parent) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  sp.position.set(x, y, z); sp.scale.set(size, size, 1); (parent || scene).add(sp); return sp;
+}
+// street lamps near the base
+function lampPost(x, z) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 7, 6), matte({ color: 0x1a1a1e }));
+  pole.position.y = 3.5; g.add(pole);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.25, 0.4), new THREE.MeshBasicMaterial({ color: 0xffc070 }));
+  head.position.set(0.3, 7, 0); g.add(head); streetHeads.push(head); head.userData.halo = halo(0.3, 6.9, 0, 0xffb060, 4.5, g);
+  g.position.set(x, 0, z); scene.add(g);
+}
+lampPost(-9, B + 12); lampPost(13, B + 9); lampPost(B + 12, -8); lampPost(-B - 11, 5);
+
+// --- clouds: soft canvas blobs, drifting. Looking up from the base, they make the tower lean.
+const clouds = [];
+{
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const cx = cv.getContext('2d');
+  for (let k = 0; k < 9; k++) {
+    const x = 80 + Math.random() * 96, y = 80 + Math.random() * 96, r = 30 + Math.random() * 45;   // keep blobs inside the tile: no hard edges
+    const gr = cx.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 256, 256);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  for (let i = 0; i < 46; i++) {
+    const m = new THREE.SpriteMaterial({ map: tex, color: 0x9aa4b8, transparent: true, opacity: 0.55 + hash(i, 31) * 0.3, depthWrite: false, fog: true });
+    const s = new THREE.Sprite(m);
+    const sz = 70 + hash(i, 32) * 120; s.scale.set(sz, sz * (0.55 + hash(i, 33) * 0.4), 1);
+    s.position.set((hash(i, 34) - 0.5) * 700, 120 + hash(i, 35) * 160, (hash(i, 36) - 0.5) * 700);
+    s.userData.v = 2.2 + hash(i, 37) * 2.5;
+    scene.add(s); clouds.push(s);
+  }
+}
+
+// dust: motes drifting in the shaft, only ever placed around the player so they catch the lamps
+const DUST_N = 420, dustPos = new Float32Array(DUST_N * 3), dustVel = [];
+for (let i = 0; i < DUST_N; i++) { dustPos[i * 3] = (Math.random() - 0.5) * 9; dustPos[i * 3 + 1] = Math.random() * 20; dustPos[i * 3 + 2] = (Math.random() - 0.5) * 9; dustVel.push([(Math.random() - 0.5) * 0.15, -0.04 - Math.random() * 0.08, (Math.random() - 0.5) * 0.15]); }
+const dustGeo = new THREE.BufferGeometry(); dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size: 0.045, color: 0xffd9a0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+scene.add(dust);
+function updateDust(dt) {
+  const a = dustGeo.attributes.position, y0 = P.pos.y - 6, y1 = P.pos.y + 14;
+  for (let i = 0; i < DUST_N; i++) { let x = a.getX(i) + dustVel[i][0] * dt, y = a.getY(i) + dustVel[i][1] * dt, z = a.getZ(i) + dustVel[i][2] * dt;
+    if (y < y0) y = y1; if (Math.abs(x) > 4.4) x = -x * 0.98; if (Math.abs(z) > 4.4) z = -z * 0.98; a.setXYZ(i, x, y, z); }
+  a.needsUpdate = true; dust.visible = P.inside || COL.active;
+}
+
+// ---------------------------------------------------------------- tower (from Blender) + interior
+const tower = new THREE.Group(); scene.add(tower);
+// stained stone: vertical streaks + blotches, tiled in world space (4 m per tile)
+const makeStone = (streaks, blotches = 60) => {
+  const W = 256, Hh = 512, cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const c = cv.getContext('2d');
+  c.fillStyle = '#bbb6ab'; c.fillRect(0, 0, W, Hh);
+  for (let y = 40; y < Hh; y += 160) { // formwork lines (the texture tiles every 8 m vertically)
+    c.fillStyle = 'rgba(0,0,0,0.13)'; c.fillRect(0, y, W, 2); c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(0, y + 2, W, 1);
+  }
+  for (let i = 0; i < streaks; i++) { // vertical rain streaks
+    const x = Math.random() * W, y0 = Math.random() * Hh, l = 20 + Math.random() * 220, a = 0.015 + Math.random() * 0.045;
+    c.strokeStyle = Math.random() < 0.5 ? `rgba(40,30,20,${a})` : `rgba(255,250,240,${a * 0.7})`; c.lineWidth = 1 + Math.random() * 2;
+    c.beginPath(); c.moveTo(x, y0); c.lineTo(x + (Math.random() - 0.5) * 3, y0 + l); c.stroke();
+  }
+  for (let i = 0; i < blotches; i++) { // blotches
+    const x = Math.random() * W, y = Math.random() * Hh, r = 8 + Math.random() * 40;
+    const g = c.createRadialGradient(x, y, 0, x, y, r); const d = Math.random() < 0.6;
+    g.addColorStop(0, d ? 'rgba(60,45,30,0.16)' : 'rgba(255,245,225,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 4000; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; c.fillRect(Math.random() * W, Math.random() * Hh, 1.5, 1.5); }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t;
+};
+const stoneTex = makeStone(320), slabTex = makeStone(40);
+// a normal map from a texture's brightness, so the streaks and blotches catch the lamps as relief
+function normalFrom(tex, strength = 2.2) {
+  const src = tex.image, W = src.width, Hh = src.height, c = src.getContext('2d'), d = c.getImageData(0, 0, W, Hh).data;
+  const hgt = (x, y) => { x = (x + W) % W; y = (y + Hh) % Hh; const i = (y * W + x) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 765; };
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const o = cv.getContext('2d'), img = o.createImageData(W, Hh), e = img.data;
+  for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+    const dx = (hgt(x + 1, y) - hgt(x - 1, y)) * strength, dy = (hgt(x, y + 1) - hgt(x, y - 1)) * strength, L = Math.hypot(dx, dy, 1);
+    const i = (y * W + x) * 4; e[i] = Math.round((-dx / L * 0.5 + 0.5) * 255); e[i + 1] = Math.round((dy / L * 0.5 + 0.5) * 255); e[i + 2] = Math.round((1 / L * 0.5 + 0.5) * 255); e[i + 3] = 255; }
+  o.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t;
+}
+const stoneNrm = normalFrom(makeStone(320, 0), 1.6), slabNrm = normalFrom(makeStone(40, 0), 1.4);   // relief from grain and streaks only, never from the stains
+function boxUV(geo, tile = 4) {
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i)), nz = Math.abs(n.getZ(i));
+    let u, v; if (nx >= ny && nx >= nz) { u = z; v = y; } else if (nz >= nx && nz >= ny) { u = x; v = y; } else { u = x; v = z; }
+    uv[i * 2] = u / tile; uv[i * 2 + 1] = v / (tile * 2);
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+const MATS = {
+  shell: matte({ color: 0xb09a78, map: stoneTex, normalMap: stoneNrm, normalScale: new THREE.Vector2(0.4, 0.4) }),
+  trim: matte({ color: 0xa48e6c, map: stoneTex, normalMap: stoneNrm, normalScale: new THREE.Vector2(0.5, 0.5) }),
+  parapet: matte({ color: 0xa48e6c, map: stoneTex, normalMap: stoneNrm, normalScale: new THREE.Vector2(0.5, 0.5) }),
+  mast: matte({ color: 0x1c1c22 }),
+  lamps: new THREE.MeshBasicMaterial({ color: 0xfff6dc }),
+  floor: matte({ color: 0x17161a }),
+};
+let lampsMesh = null;
+// the shell comes in stacked segments; each is a group parented to the one below, so tilting or crushing one moves everything above it
+const SEGZ = LAYOUT.segments, NSEG = SEGZ.length - 1;
+const segOf = y => { for (let k = NSEG - 1; k >= 0; k--) if (y >= SEGZ[k]) return k; return 0; };
+const segGroups = [];
+for (let k = 0; k < NSEG; k++) { const g = new THREE.Group(); g.position.y = k === 0 ? 0 : SEGZ[k] - SEGZ[k - 1]; (k === 0 ? tower : segGroups[k - 1]).add(g); segGroups.push(g); }
+function attachToSeg(obj, k = segOf(obj.position.y)) { obj.position.y -= SEGZ[k]; segGroups[k].add(obj); }
+const occluders = [];   // what can hide the thing from you: the shell segments and the slabs
+const segXform = segGroups.map(() => new THREE.Matrix4());   // rest-world -> current-world, per segment (identity until the collapse)
+function updateSegXforms() { tower.updateMatrixWorld(true); segGroups.forEach((g, k) => segXform[k].copy(g.matrixWorld).multiply(_m.makeTranslation(0, -SEGZ[k], 0))); }
+function loadTower() {
+  return new Promise((res, rej) => {
+    const bin = atob(GLB_B64), arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    new THREE.GLTFLoader().parse(arr.buffer, '', gltf => {
+      const meshes = []; gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
+      for (const o of meshes) {
+        const kind = o.name.replace(/\d+$/, '');
+        o.material = MATS[kind] || MATS.shell; if (o.material.map) boxUV(o.geometry); if (o.name === 'lamps') lampsMesh = o;
+        o.castShadow = o.receiveShadow = (o.name !== 'lamps');
+        const m = /^(seg|trim)(\d+)$/.exec(o.name);
+        if (m) attachToSeg(o, +m[2]); else if (o.name === 'floor') tower.add(o); else attachToSeg(o, NSEG - 1);   // parapet, mast, lamps ride the top
+        if (m && m[1] === 'seg') occluders.push(o);
+      }
+      res();
+    }, rej);
+  });
+}
+
+// slabs — instanced boxes. Blender (x, y) -> three (x, -y)
+const SL = LAYOUT.slabs;
+const slabGeo = new THREE.BoxGeometry(1, 1, 1);
+const slabMesh = new THREE.InstancedMesh(slabGeo, matte({ color: 0xffffff, map: slabTex, normalMap: slabNrm, normalScale: new THREE.Vector2(0.45, 0.45) }), SL.length);
+slabMesh.castShadow = slabMesh.receiveShadow = true;
+const C_STONE = new THREE.Color(0x9a8f7c), C_LANDING = new THREE.Color(0xa89c86), C_CRUMBLE = new THREE.Color(0x7a5a4e);
+tower.add(slabMesh);
+const slabState = SL.map(() => ({ gone: false, crumble: false, timer: 0, fallV: 0, fallY: 0, respawn: 0, shake: 0, loose: null }));
+const slabSeg = SL.map(s => segOf(s.top));
+const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
+function slabRect(s) { // xz rect in three coords
+  const along = s.angle === 0, hx = along ? s.len / 2 : s.depth / 2, hz = along ? s.depth / 2 : s.len / 2;
+  return { x0: s.x - hx, x1: s.x + hx, z0: -s.y - hz, z1: -s.y + hz };
+}
+function placeSlab(i) {
+  const s = SL[i], st = slabState[i];
+  if (st.gone && st.fallY <= -1e5) { _m.makeScale(0, 0, 0); slabMesh.setMatrixAt(i, _m); return; }
+  if (st.loose) { const L = st.loose; _p.copy(L.p); _e.set(L.r.x, L.r.y, L.r.z); _q.setFromEuler(_e); _s.set(s.len, s.th, s.depth); _m.compose(_p, _q, _s); slabMesh.setMatrixAt(i, _m); return; }
+  const jitter = st.shake * 0.05;
+  _p.set(s.x + (Math.random() - 0.5) * jitter, s.top - s.th / 2 - st.fallY, -s.y + (Math.random() - 0.5) * jitter);
+  _e.set(st.fallY * 0.05, s.angle, st.fallY * 0.08); _q.setFromEuler(_e);
+  _s.set(s.len, s.th, s.depth);   // the rotation about Y handles orientation
+  _m.compose(_p, _q, _s);
+  if (COL.active) _m.premultiply(segXform[slabSeg[i]]);
+  slabMesh.setMatrixAt(i, _m);
+}
+
+// wall lamps at landings (sodium boxes) + a pool of point lights that follows the player
+const lampSpots = [], lampPool = [];
+const lampGeo = new THREE.BoxGeometry(0.5, 0.22, 0.18);
+const lampMat = new THREE.MeshBasicMaterial({ color: 0xffb54a });
+const lampMatOff = new THREE.MeshBasicMaterial({ color: 0x2a2018 });
+for (const s of SL) if (s.landing) {
+  const m = new THREE.Mesh(lampGeo, lampMat.clone());
+  // against the wall behind the landing, 2.3 m above the slab
+  const ix = s.inward[0], iz = -s.inward[1];
+  const wx = s.x - ix * (s.depth / 2 - 0.09), wz = -s.y - iz * (s.depth / 2 - 0.09);
+  m.position.set(wx, s.top + 2.3, wz); m.rotation.y = s.angle === 0 ? 0 : Math.PI / 2;
+  attachToSeg(m); lampSpots.push({ mesh: m, x: wx + ix * 0.4, y: s.top + 2.2, z: wz + iz * 0.4, lap: s.lap, idx: s.i, on: true, flick: 1 });
+}
+for (let i = 0; i < 5; i++) { const pl = new THREE.PointLight(0xff9a30, 0.95, 14, 2); scene.add(pl); lampPool.push(pl); }
+for (const l of lampSpots) { const ix = l.mesh.position; l.halo = halo(0, 0, 0, 0xffa042, 2.2); l.mesh.add(l.halo); l.halo.position.set(0, 0, 0); }
+const mastHalos = []; for (const [mx, my, mz] of LAYOUT.lamps) { const h = halo(mx, mz, -my, 0xfff1d6, 3.6); attachToSeg(h, NSEG - 1); mastHalos.push(h); }
+// the three roof lights also light the roof
+const mastLight = new THREE.PointLight(0xfff0d0, 0.9, 40, 1.6); { const [mx, my, mz] = LAYOUT.lamps[1]; mastLight.position.set(mx, mz, -my); scene.add(mastLight); }
+// entrance lamp above the door, inside
+const doorLamp = new THREE.PointLight(0xffa445, 0.9, 12, 2); doorLamp.position.set(0, 3.2, A - 0.5); scene.add(doorLamp);
+
+// notes: small paper quads on landings
+const noteMeshes = [];
+const noteGeo = new THREE.PlaneGeometry(0.32, 0.42); noteGeo.rotateX(-Math.PI / 2);
+const noteMat = new THREE.MeshBasicMaterial({ color: 0xe8e2cf });
+
+// ---------------------------------------------------------------- save & continue (one slot, local to this browser)
+const SAVE = {
+  data: null,
+  load() { try { const d = JSON.parse(localStorage.getItem('vertigo.save')); if (d && d.ascent >= 1 && d.ascent <= 3 && d.cp) this.data = d; } catch (e) {} },
+  write() { if (COL.active || G.state === 'end') return; const d = { ascent: G.ascent, cp: { ...P.checkpoint }, falls: G.falls, totalClimb: G.totalClimb, elapsed: (performance.now() - G.startTime) / 1000, cpSlab: G.cpSlab ?? -1 };
+    try { localStorage.setItem('vertigo.save', JSON.stringify(d)); } catch (e) {} },
+  clear() { this.data = null; try { localStorage.removeItem('vertigo.save'); } catch (e) {} },
+  restore() {   // called from begin(): straight to the saved landing, no opening shot
+    const d = this.data; this.data = null;
+    G.setupAscent(d.ascent); G.intro = null; G.lookEnabled = true; G.doorSaid = true;
+    P.place(d.cp.x, d.cp.y + 0.02, d.cp.z, d.cp.yaw, 0.05); P.roll = 0; P.checkpoint = { ...d.cp }; G.cpSlab = d.cpSlab;
+    G.falls = d.falls || 0; G.totalClimb = d.totalClimb || 0; G.startTime = performance.now() - (d.elapsed || 0) * 1000;
+    if (d.cp.y >= TOWER_H - 1) G.roofSaid = true;
+    if (FIG.active || d.ascent === 1 && FIG.playerIdx() >= 48) FIG.spawn(40, FIG.active ? FIG.speed : 0.85);
+    G.say(`Ascent ${d.ascent}. You don't remember stopping.`, 4);
+  },
+};
+SAVE.load();
+if (SAVE.data) { const lap = Math.floor((SAVE.data.cpSlab >= 0 ? SAVE.data.cpSlab : 0) / 16) + 1; const where = SAVE.data.cp.y >= TOWER_H - 1 ? 'the roof' : `lap ${lap}`;
+  $('clickgo').textContent = `${IS_TOUCH ? 'tap' : 'click'} to continue — ascent ${SAVE.data.ascent} · ${where}`; $('startover').style.display = 'block';
+  $('startover').addEventListener('click', e => { e.stopPropagation(); SAVE.clear(); $('clickgo').textContent = IS_TOUCH ? 'tap to begin' : 'click to begin'; $('startover').style.display = 'none'; });
+  $('startover').addEventListener('touchstart', e => { e.stopPropagation(); }, { passive: true }); }
+
+// ---------------------------------------------------------------- the figure on the stairs below you
+const FIG = {
+  active: false, idx: 0, speed: 0.9, body: null, puffs: [], smoke: null, grab: null, rush: null, disperse: -1, idle: 0, lastLookT: -9, breathT: 0,
+  init() {
+    // the smoke: a particle system. Puffs are emitted continuously from wherever it is, swirl around the column,
+    // rise, grow and die - so it roils on the spot and leaves a tail when it moves. Three noisy puff textures.
+    this.smoke = new THREE.Group(); scene.add(this.smoke);
+    const puffTex = (seed) => { const N = 128, cv = document.createElement('canvas'); cv.width = cv.height = N; const c = cv.getContext('2d');
+      const img = c.createImageData(N, N), d = img.data;
+      const blobs = []; for (let b = 0; b < 14; b++) blobs.push([N * (0.3 + hash(b, seed) * 0.4), N * (0.3 + hash(b, seed + 9) * 0.4), N * (0.08 + hash(b, seed + 17) * 0.16)]);
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const dx = x - N / 2, dy = y - N / 2, r = Math.hypot(dx, dy) / (N / 2);
+        let v = 0; for (const [bx, by, br] of blobs) { const q = Math.hypot(x - bx, y - by) / br; v += Math.max(0, 1 - q * q); }
+        const edge = clamp(1 - (r - 0.45) / 0.55, 0, 1); const a = clamp(v * 0.55, 0, 1) * edge * edge;
+        const i = (y * N + x) * 4; d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = Math.round(a * 255); }
+      c.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(cv); return t; };
+    this.puffTex = [puffTex(1), puffTex(2), puffTex(3)];
+    this.parts = [];
+    for (let k = 0; k < 110; k++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffTex[k % 3], color: 0x000000, transparent: true, opacity: 0, depthWrite: false, fog: false, rotation: Math.random() * 6.28 }));
+      sp.visible = false; this.smoke.add(sp); this.parts.push({ sp, life: 0, age: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), spin: 0, size: 1, tendril: false });
+    }
+    this.flashes = [0, 1, 2].map(() => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: clouds[0].material.map, color: 0xb0aac8, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); sp.scale.set(0.7, 0.55, 1); this.smoke.add(sp); return sp; });
+    this.flashT = 0; this.tickT = 1; this.emitAcc = 0; this.lastPos = null; this.puffs = [];
+    this.light = new THREE.PointLight(0x8a84c0, 0, 10, 2); scene.add(this.light);
+    // the afterimage of the face, burned in for a moment
+    this.after = null;
+    // the face: drawn, mottled, torn, smeared. Only ever seen for a third of a second.
+    const W = 256, Hh = 384, cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const c = cv.getContext('2d');
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const jag = (cx, cy, rx, ry, n, wobble) => { c.beginPath(); for (let i = 0; i <= n; i++) { const t = i / n * Math.PI * 2, w = 1 + (Math.sin(t * 7.3) * 0.5 + Math.sin(t * 3.1 + 1) * 0.5) * wobble; const x = cx + Math.cos(t) * rx * w, y = cy + Math.sin(t) * ry * w; i ? c.lineTo(x, y) : c.moveTo(x, y); } c.closePath(); };
+    // skin: grey, dead, darker toward the edges; asymmetric outline
+    c.save(); jag(128, 200, 84, 136, 48, 0.06); c.clip();
+    const skin = c.createRadialGradient(118, 180, 10, 128, 200, 150); skin.addColorStop(0, '#9a938a'); skin.addColorStop(0.5, '#5a554f'); skin.addColorStop(1, '#151412');
+    c.fillStyle = skin; c.fillRect(0, 0, W, Hh);
+    for (let i = 0; i < 70; i++) { const g = c.createRadialGradient(rnd(50, 206), rnd(70, 330), 0, rnd(50, 206), rnd(70, 330), rnd(8, 30)); const dark = Math.random() < 0.65;   // mottling
+      g.addColorStop(0, dark ? 'rgba(5,4,4,0.45)' : 'rgba(190,182,170,0.22)'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, W, Hh); }
+    for (let i = 0; i < 1400; i++) { c.fillStyle = Math.random() < 0.6 ? 'rgba(5,4,4,0.5)' : 'rgba(150,145,135,0.3)'; c.fillRect(rnd(44, 212), rnd(64, 336), 1.2, rnd(1, 4)); }   // grit
+    for (let i = 0; i < 26; i++) { c.strokeStyle = `rgba(10,9,8,${rnd(0.08, 0.3)})`; c.lineWidth = rnd(0.6, 2.2); const x = rnd(50, 206); c.beginPath(); c.moveTo(x, rnd(80, 200)); c.lineTo(x + rnd(-6, 6), rnd(240, 340)); c.stroke(); }   // runs
+    c.restore();
+    // the holes: eyes not the same size, one higher; the mouth a long torn scream
+    c.shadowColor = 'rgba(0,0,0,0.95)'; c.fillStyle = '#000';
+    c.shadowBlur = 18; jag(92, 146, 21, 38, 40, 0.18); c.fill(); c.shadowBlur = 10; jag(92, 146, 15, 30, 40, 0.25); c.fill();
+    c.shadowBlur = 18; jag(166, 156, 17, 31, 40, 0.2); c.fill(); c.shadowBlur = 10; jag(166, 156, 12, 24, 40, 0.3); c.fill();
+    c.shadowBlur = 22; jag(128, 292, 40, 72, 56, 0.16); c.fill(); c.shadowBlur = 8; jag(128, 292, 30, 60, 56, 0.24); c.fill();
+    c.shadowBlur = 6; jag(120, 214, 5, 8, 12, 0.3); c.fill(); jag(138, 216, 5, 8, 12, 0.3); c.fill();
+    c.shadowBlur = 0; c.strokeStyle = 'rgba(200,190,176,0.45)'; c.lineWidth = 1.8;                      // a catch of light on the rims of the holes
+    jag(92, 146, 21, 38, 40, 0.18); c.stroke(); jag(166, 156, 17, 31, 40, 0.2); c.stroke(); jag(128, 292, 40, 72, 56, 0.16); c.stroke();
+    // smear it: the whole thing dragged upward and sideways a little, as if seen while moving
+    const cv2 = document.createElement('canvas'); cv2.width = W; cv2.height = Hh; const c2 = cv2.getContext('2d');
+    for (let i = 0; i < 9; i++) { c2.globalAlpha = i === 0 ? 1 : 0.16; c2.drawImage(cv, (i - 4) * 0.9, -i * 1.6); }
+    c2.globalAlpha = 1; c2.globalCompositeOperation = 'destination-in';                                    // and lose the edge into the smoke
+    const fade = c2.createRadialGradient(128, 200, 30, 128, 200, 152); fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(0.62, 'rgba(0,0,0,0.85)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    c2.fillStyle = fade; c2.fillRect(0, 0, W, Hh); c2.globalCompositeOperation = 'source-over';
+    const cvF = cv2;
+    const ftex = new THREE.CanvasTexture(cvF); ftex.encoding = THREE.sRGBEncoding;   // display-referred: keep it as dark as drawn
+    this.face = new THREE.Sprite(new THREE.SpriteMaterial({ map: ftex, transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false }));
+    this.face.renderOrder = 10; this.face.scale.set(0.6, 0.9, 1); scene.add(this.face);
+    this.body = null;
+  },
+  // where it stands: fractional slab index -> world point on the spiral
+  posAt(idx, out) {
+    const i = clamp(Math.floor(idx), 0, SL.length - 1), j = Math.min(i + 1, SL.length - 1), f = clamp(idx - i, 0, 1), a = SL[i], b = SL[j];
+    return out.set(lerp(a.x, b.x, f), lerp(a.top, b.top, f), lerp(-a.y, -b.y, f));
+  },
+  playerIdx() { return clamp(P.pos.y / LAYOUT.rise - 1, 0, SL.length - 1); },
+  spawn(behind, speed) { this.active = true; this.idx = Math.max(0, this.playerIdx() - behind); this.speed = speed; this.baseSpeed = speed; this.grab = null; this.rush = null; this.disperse = -1;
+    this.los = false; this.losT = -99; this.seenOnce = false; this.heardOnce = false; this.said8 = false; this.said4 = false; this.snapT = -99; this.awareYaw = Math.random() * 6.28; },
+  reset() { this.active = false; this.grab = null; this.rush = null; this.disperse = -1; this.show(null, 0, 0); if (this.face) this.face.material.opacity = 0; },
+  // draw it: smoke around `pos` with tightness 0..1, body opacity 0..1
+  show(pos, smokeA, bodyA, tight = 0) {
+    const t = G.t, dt = 1 / 60;
+    const emitting = !!pos && smokeA > 0;
+    // how fast it is moving: a moving column leaves a tail and gets wilder
+    let speed = 0; if (emitting && this.lastPos) speed = Math.min(12, this.lastPos.distanceTo(pos) / dt); if (emitting) { this.lastPos = this.lastPos || pos.clone(); this.lastPos.copy(pos); } else this.lastPos = null;
+    const rate = emitting ? (34 + speed * 6 + tight * 40) : 0, radius = lerp(0.42, 0.14, tight), lifeK = lerp(1, 0.5, tight);
+    this.emitAcc = emitting ? this.emitAcc + rate * dt : 0;
+    const axis = emitting ? pos : this.axisPos;   // dead column: the last puffs keep swirling round where it was
+    if (emitting) { this.axisPos = this.axisPos || new THREE.Vector3(); this.axisPos.copy(pos); }
+    for (const q of this.parts) {
+      if (q.life <= 0) {
+        if (!emitting || this.emitAcc < 1) continue; this.emitAcc -= 1;
+        // born near the column axis at a random height, with a swirl around the axis and lift
+        const a = Math.random() * 6.283, r = radius * Math.sqrt(Math.random()), h = Math.random() * 2.2;
+        q.p.set(pos.x + Math.cos(a) * r, pos.y + h, pos.z + Math.sin(a) * r);
+        const swirl = 1.4 + Math.random() * 1.6;
+        q.v.set(-Math.sin(a) * swirl + (Math.random() - 0.5) * 0.8, 0.45 + Math.random() * 0.7, Math.cos(a) * swirl + (Math.random() - 0.5) * 0.8);
+        q.tendril = Math.random() < 0.12; if (q.tendril) { q.v.x += (Math.random() - 0.5) * 7; q.v.z += (Math.random() - 0.5) * 7; q.v.y += 0.5; }
+        q.life = q.age = (q.tendril ? 0.35 : 0.9 + Math.random() * 0.9) * lifeK;
+        q.size = (q.tendril ? 0.45 : 0.55 + Math.random() * 0.5) * lerp(1, 0.6, tight); q.spin = (Math.random() - 0.5) * 4; q.sp.visible = true; q.ax = pos.x; q.az = pos.z;
+      }
+      q.age -= dt; if (q.age <= 0) { q.life = 0; q.sp.visible = false; continue; }
+      // orbit the axis (curl), drag, lift; the axis follows the column so the puffs are dragged along and trail
+      if (axis) { const dx = q.p.x - axis.x, dz = q.p.z - axis.z, dr = Math.hypot(dx, dz) || 1e-3;
+        q.v.x += (-dz / dr * 3.0 - dx * 1.2) * dt; q.v.z += (dx / dr * 3.0 - dz * 1.2) * dt; } q.v.y += 0.35 * dt;
+      q.v.multiplyScalar(1 - 1.6 * dt);
+      q.p.addScaledVector(q.v, dt);
+      const u = 1 - q.age / q.life, grow = q.tendril ? 1 + u * 1.5 : 0.7 + u * 1.3, fade = Math.min(1, u * 6) * Math.min(1, (1 - u) * 2.2);
+      const sz = q.size * grow * 1.9; q.sp.position.copy(q.p); q.sp.scale.set(sz, sz, 1); q.sp.material.rotation += q.spin * dt;
+      q.sp.material.opacity = smokeA * fade * (q.tendril ? 0.8 : 0.96) * (1 - bodyA * 0.6);
+    }
+    // flickers of something inside it
+    if (this.flashes) { this.flashT -= dt;
+      if (emitting && bodyA < 0.3 && this.flashT <= 0) { this.flashT = 0.35 + Math.random() * 1.3; this.flashOn = 0.05 + Math.random() * 0.07;
+        for (const f of this.flashes) { f.position.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 0.3 + Math.random() * 1.7, pos.z + (Math.random() - 0.5) * 0.5); f.material.opacity = 0.3 + Math.random() * 0.5; }
+        this.light.position.set(pos.x, pos.y + 1.1, pos.z); this.light.intensity = 0.9 + Math.random() * 0.7; }
+      if (this.flashOn > 0) { this.flashOn -= dt; if (this.flashOn <= 0) { for (const f of this.flashes) f.material.opacity = 0; this.light.intensity = 0; } }
+      if (!emitting || bodyA >= 0.3) { for (const f of this.flashes) f.material.opacity = 0; this.light.intensity = 0; } }
+    if (this.after) { this.after.t += dt; this.after.sp.material.opacity = Math.max(0, 0.35 * (1 - this.after.t / 0.7)); const k = 1 + this.after.t * 0.6; this.after.sp.scale.set(this.after.s * k, this.after.s * 1.5 * k, 1);
+      if (this.after.t > 0.7) { scene.remove(this.after.sp); this.after = null; } }
+  },
+  update(dt) {
+    if (G.state !== 'play' || COL.active) { if (this.disperse >= 0) this.updateDisperse(dt); return; }
+    if (this.rush) return this.updateRush(dt);
+    if (!this.active) { if (G.ascent === 1 && this.playerIdx() >= 48) this.spawn(48, 0.85); else { Audio.figLevel(0, G.t); return; } }
+    const pIdx = this.playerIdx();
+    // pace: faster than you when you stand still, about your pace when you move - stopping is what lets it gain
+    const pSlabs = Math.hypot(P.vel.x, P.vel.z) / LAYOUT.slabLen;
+    const want = pSlabs > 0.4 ? Math.max(this.baseSpeed, pSlabs * 0.95) : this.baseSpeed * 2.8;
+    this.speed = lerp(this.speed, want, 1 - Math.exp(-dt * 1.5));
+    if (!this.grab) {
+      const cap = P.onRoof ? SL.length - 1 : pIdx - 0.5;
+      this.idx = Math.min(this.idx + this.speed * dt, Math.max(this.idx, cap), SL.length - 1);
+    }
+    const pos = this.posAt(this.idx, tmp);
+    const d = Math.max(0, pIdx - this.idx), near = clamp(1 - d / 56, 0, 1);
+    // can you see it? a ray from your eye to it, against the shell and the slabs, a few times a second
+    this.losCheck = (this.losCheck || 0) + dt;
+    if (this.losCheck > 0.08) { this.losCheck = 0;
+      const eye = new THREE.Vector3(P.pos.x, P.pos.y + EYE, P.pos.z), to = new THREE.Vector3(pos.x, pos.y + 1.0, pos.z), dist = eye.distanceTo(to);
+      losRay.set(eye, to.sub(eye).normalize()); losRay.far = dist - 0.4;
+      const hit = losRay.intersectObjects([slabMesh, ...occluders], false);
+      const clear = hit.length === 0 && d > 0.5;
+      if (clear && !this.los) { this.losT = G.t; this.sightings = (this.sightings || 0) + 1; } this.los = clear;
+    }
+    // what you say
+    if (!this.heardOnce && !this.seenOnce && near > 0.2 && !this.los) { this.heardOnce = true; G.speak(["…what is that?", "What's that noise?"], 2.5); }
+    if (this.los && G.t - this.losT < 0.3 && !this.grab) {
+      if (!this.seenOnce) { this.seenOnce = true; G.speak(["What the hell is that?!", "What the— what is that?!"], 3, true); }
+      else if (G.t - (this.lastLosEnd || -99) > 6) G.speak(["It's still coming.", "No. No no no.", "Oh god.", "Keep moving. Keep moving."], 2.6);
+    }
+    if (!this.los && this.wasLos) this.lastLosEnd = G.t; this.wasLos = this.los;
+    if (d < 8 && !this.said8) { this.said8 = true; G.speak(["It's right behind me.", "It's close. It's too close."], 2.4); }
+    if (d < 3.5 && !this.said4) { this.said4 = true; G.speak(["No— no—", "Get away from me!"], 1.6, true); }
+    // the rumble of it, swelling as it closes; a breath when it is close
+    Audio.figLevel(near * near * 0.9, G.t);
+    this.breathT -= dt; if (d < 8 && this.breathT <= 0) { this.breathT = 2.2 + Math.random(); Audio.breath(clamp(1 - d / 8, 0.2, 1)); }
+    // your head: when you stand still you become aware of it - you look down, roughly where the sound is, not at it.
+    // when it comes into view your head snaps to it. Nothing tracks it through the floor.
+    const moving = Math.hypot(P.vel.x, P.vel.z) > 0.5 || !P.grounded;
+    this.idle = moving ? 0 : this.idle + dt;
+    const dx = pos.x - P.pos.x, dy = pos.y + 1.2 - (P.pos.y + EYE), dz = pos.z - P.pos.z;
+    const yawTo = Math.atan2(-dx, -dz), pitchTo = Math.atan2(dy, Math.hypot(dx, dz));
+    const turn = (yaw, pitch, k) => { let dyaw = yaw - P.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); P.yaw += dyaw * k; P.pitch = lerp(P.pitch, clamp(pitch, -1.5, 1.5), k); };
+    const handsOff = G.t - this.lastLookT > 0.5 && P.inside && !P.onRoof && G.lookEnabled && !this.grab;
+    if (handsOff && !moving && this.los && G.t - this.losT < 1.2 && G.t - this.snapT > 6) {   // it just came into view while you stand: the head whips to it
+      this.snapT = G.t; fovKick = 8; shakeKick = Math.max(shakeKick, 0.5);
+    }
+    if (handsOff && G.t - this.snapT < 0.45) turn(yawTo, pitchTo, 1 - Math.exp(-dt * 16));
+    else if (handsOff && this.idle > 2.0) {
+      const k = clamp((this.idle - 2) / 2.5, 0, 1) * (0.4 + 0.6 * near) * dt * 1.6;
+      if (this.los) turn(yawTo, pitchTo, k);                                                        // in view: you can't stop watching it
+      else { this.awareYaw += (Math.sin(G.t * 0.37) * 0.6 + Math.sin(G.t * 0.11) * 0.4) * dt;      // out of view: down and back, roughly, wandering
+        turn(yawTo + Math.sin(this.awareYaw) * 0.9, -0.75 + Math.sin(G.t * 0.5) * 0.15, k * 0.7); }
+    }
+    // it reaches you on the stairs
+    if (!this.grab && d < 1.15 && Math.abs(pos.y - P.pos.y) < 2.5 && P.grounded && P.inside && !P.onRoof) {
+      this.grab = { t: 0, pos: pos.clone() }; P.thrown = 'held'; Audio.grab(); shakeKick = 1.2; fovKick = 20;
+    }
+    if (this.grab) { this.updateGrab(dt, this.grab, () => { const dir = tmp.set(-P.pos.x, 0, -P.pos.z).normalize(); return dir; }); return; }
+    // smoke on the stairs; the body starts to show through it in the last few slabs
+    this.show(pos, 1, 0, clamp((5 - d) / 5, 0, 1) * 0.5);
+  },
+  // the face comes out of the smoke, from the side away from the drop, straight at you; you go over backwards
+  updateGrab(dt, g, stumbleDir) {
+    if (!g.from) {   // it starts 3.5 m away on the side opposite the drop, at eye height
+      const sd = stumbleDir().clone(); g.dir = sd; g.from = new THREE.Vector3(P.pos.x - sd.x * 3.5, P.pos.y + EYE + 0.2, P.pos.z - sd.z * 3.5);
+      Audio.scream(); fovKick = -16; scareKick = 1;                                   // the world zooms in on it
+    }
+    g.t += dt;
+    const dx = g.from.x - P.pos.x, dy = g.from.y - (P.pos.y + EYE), dz = g.from.z - P.pos.z;
+    const yawTo = Math.atan2(-dx, -dz), pitchTo = Math.atan2(dy, Math.hypot(dx, dz));
+    let dyaw = yawTo - P.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); const k = 1 - Math.exp(-dt * 26);
+    P.yaw += dyaw * k; P.pitch = lerp(P.pitch, pitchTo, k);
+    // 0 - 0.32 s: it closes the distance, accelerating, growing until it fills the view
+    const u = Math.pow(clamp(g.t / 0.32, 0, 1), 1.7);
+    const eye = tmp.set(P.pos.x, P.pos.y + EYE, P.pos.z), look = new THREE.Vector3(-Math.sin(P.yaw) * Math.cos(P.pitch), Math.sin(P.pitch), -Math.cos(P.yaw) * Math.cos(P.pitch));
+    const end = eye.clone().addScaledVector(look, 0.42);
+    const at = g.from.clone().lerp(end, u); at.x += (Math.random() - 0.5) * 0.05 * u; at.y += (Math.random() - 0.5) * 0.05 * u;
+    const sc = lerp(0.35, 1.45, u); this.face.position.copy(at); this.face.scale.set(sc, sc * 1.5, 1); this.face.material.rotation = (Math.random() - 0.5) * 0.25 * u;
+    const strobe = u > 0.6 ? (Math.floor(g.t * 40) % 2 ? 1 : 0.7) : 1;                                   // it flickers as it hits
+    this.face.material.opacity = (g.t < 0.7 ? Math.min(1, g.t * 12) : Math.max(0, 1 - (g.t - 0.7) * 5)) * strobe;
+    if (g.t > 0.22 && !g.strobed) { g.strobed = true; const el = renderer.domElement; el.style.filter = 'invert(1)'; setTimeout(() => el.style.filter = '', 45); flash(0.7);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.face.material.map, transparent: true, opacity: 0.35, depthWrite: false, depthTest: false, fog: false })); sp.renderOrder = 11;
+      sp.position.copy(at); this.after = { sp, t: 0, s: sc }; scene.add(sp); }
+    if (this.after && this.after.t < 0.7) { const eye2 = new THREE.Vector3(P.pos.x, P.pos.y + EYE, P.pos.z); const look2 = new THREE.Vector3(-Math.sin(P.yaw) * Math.cos(P.pitch), Math.sin(P.pitch), -Math.cos(P.yaw) * Math.cos(P.pitch)); this.after.sp.position.copy(eye2).addScaledVector(look2, 0.5); }
+    const smokeAt = at.clone(); smokeAt.y -= 1.1; this.show(smokeAt, 1, 0, 0.75);
+    if (g.t > 0.3 && P.thrown === 'held') {
+      P.thrown = 'air'; const dir = g.dir;
+      P.pos.addScaledVector(dir, 0.5);                                               // the stumble back
+      const h = g.roof ? 4.8 : 4.2; P.vel.set(dir.x * h, g.roof ? 5.8 : 2.6, dir.z * h); P.grounded = false;   // the roof stumble clears the parapet
+      P.fallStart = P.pos.y; P.pitch += 0.35; Audio.thud(); fovKick = 34; flash(0.4); shakeKick = 2;
+    }
+    if (g.t > 0.9) { if (g.roof) { this.rush = null; this.active = false; } else this.grab = null; this.show(null, 0, 0); this.face.material.opacity = 0; }
+  },
+  // the roof: a light goes out, you turn, and it comes across the roof at you from the hatch
+  startRush() {
+    this.active = true; this.rush = { t: 0, from: this.posAt(SL.length - 1, new THREE.Vector3()), grab: null }; this.grab = null;
+    this.rush.from.y = TOWER_H; this.lastLookT = -9;
+  },
+  updateRush(dt) {
+    const r = this.rush; r.t += dt;
+    if (r.grab) return this.updateGrab(dt, r.grab, () => tmp.set(P.pos.x, 0, P.pos.z).normalize());   // out over the parapet
+    // 0-1.2 s: your head is turned to the hatch. 1.0-2.8 s: it comes.
+    const dx = r.from.x - P.pos.x, dz = r.from.z - P.pos.z, yawTo = Math.atan2(-dx, -dz);
+    let dyaw = yawTo - P.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); const k = 1 - Math.exp(-dt * 5);
+    P.yaw += dyaw * k; P.pitch = lerp(P.pitch, -0.15, k);
+    const u = Math.pow(clamp((r.t - 0.9) / 1.1, 0, 1), 1.6);   // it hangs at the hatch, then comes fast
+    const toYou = tmp.set(P.pos.x - r.from.x, 0, P.pos.z - r.from.z), dist = toYou.length(); toYou.normalize();
+    const at = r.from.clone().addScaledVector(toYou, Math.max(0, dist - 0.9) * u); at.y = TOWER_H;
+    this.show(at, 1, 0, u * 0.6);
+    Audio.figLevel(0.3 + 0.7 * u, G.t);
+    if (r.t > 0.5 && !r.said) { r.said = true; Audio.breath(0.8); G.speak(["What the—", "Oh no. No."], 1.8); }
+    if (u >= 1) { r.grab = { t: 0, pos: at.clone(), roof: true }; P.thrown = 'held'; Audio.grab(); shakeKick = 1.2; fovKick = 20; }
+  },
+  // the third light: it has nothing left to climb - the smoke lifts off the hatch and comes apart
+  startDisperse() { this.active = false; this.grab = null; this.rush = null; this.disperse = 0; this.dPos = this.posAt(SL.length - 1, new THREE.Vector3()); this.dPos.y = TOWER_H; },
+  updateDisperse(dt) {
+    this.disperse += dt; const u = this.disperse / 4;
+    if (u >= 1) { this.disperse = -1; this.show(null, 0, 0); return; }
+    this.dPos.y += dt * 2.2; this.show(this.dPos, 1 - u, 0, 0);
+  },
+};
+
+// ---------------------------------------------------------------- collision solids
+// each: {x0,x1,z0,z1, y0,y1, slab:index|undefined}
+let solids = [];
+function rebuildSolids() {
+  solids = [];
+  SL.forEach((s, i) => { if (slabState[i].gone) return; const r = slabRect(s); solids.push({ ...r, y0: s.top - s.th, y1: s.top, slab: i }); });
+  for (const [x0, x1, y0, y1] of LAYOUT.roofRects) solids.push({ x0, x1, z0: -y1, z1: -y0, y0: LAYOUT.roofZ0, y1: LAYOUT.roofZ1 });
+  for (const [x0, x1, y0, y1] of LAYOUT.parapetRects) solids.push({ x0, x1, z0: -y1, z1: -y0, y0: LAYOUT.roofZ1, y1: LAYOUT.roofZ1 + 1.0 });
+}
+// a safe spot on the roof: the middle of the largest walkable roof rectangle (the hatch is a hole)
+const ROOF_SAFE = (() => {
+  const onRoof = (x, z) => LAYOUT.roofRects.some(([x0, x1, y0, y1]) => x >= x0 + 0.5 && x <= x1 - 0.5 && -z >= y0 && -z <= y1);
+  const want = { x: -(A - 2.5), z: 0 };                       // middle of the main roof, away from the hatch
+  if (onRoof(want.x, want.z)) return want;
+  let best = want, area = 0; for (const [x0, x1, y0, y1] of LAYOUT.roofRects) { const a = (x1 - x0) * (y1 - y0); if (a > area) { area = a; best = { x: (x0 + x1) / 2, z: -(y0 + y1) / 2 }; } } return best;
+})();
+// walls of the shaft / tower as region test (exact for box-in-box). true = point is free.
+function isFree(x, z, y) {
+  const r = RADIUS;
+  if (y >= LAYOUT.roofZ1 - 0.01) return true;                            // on the roof or above
+  if (Math.abs(x) <= A - r && Math.abs(z) <= A - r) return true;          // inside the shaft
+  if (Math.abs(x) >= B + r || Math.abs(z) >= B + r) return true;          // outside
+  const dw = LAYOUT.door.w / 2;
+  if (Math.abs(x) <= dw - r && z >= A - r - 0.02 && z <= B + r + 0.02 && y < LAYOUT.door.h - 1.75) return true; // door tunnel
+  return false;
+}
+function groundAt(x, z, feetY, reach = RADIUS * 0.6) {
+  let best = -Infinity, ref = null;
+  for (const s of solids) {
+    if (x + reach < s.x0 || x - reach > s.x1 || z + reach < s.z0 || z - reach > s.z1) continue;
+    if (s.y1 <= feetY + STEP && s.y1 > best) { best = s.y1; ref = s; }
+  }
+  if (best < 0 && feetY + STEP >= 0) { best = 0; ref = null; }   // the earth
+  return { y: best, ref };
+}
+function pushOutSolids(p) {
+  for (const s of solids) {
+    if (p.x + RADIUS <= s.x0 || p.x - RADIUS >= s.x1 || p.z + RADIUS <= s.z0 || p.z - RADIUS >= s.z1) continue;
+    if (s.y1 <= p.y + STEP || s.y0 >= p.y + 1.7) continue;      // can step onto it, or it's above the head
+    if (s.y0 > p.y + STEP) {                                      // a ceiling (the roof slab): bump the head, don't shove sideways
+      p.y = s.y0 - 1.7; if (P.vel.y > 0) P.vel.y = 0; continue; }
+    const dx0 = p.x + RADIUS - s.x0, dx1 = s.x1 - (p.x - RADIUS), dz0 = p.z + RADIUS - s.z0, dz1 = s.z1 - (p.z - RADIUS);
+    const m = Math.min(dx0, dx1, dz0, dz1);
+    if (m === dx0) p.x = s.x0 - RADIUS; else if (m === dx1) p.x = s.x1 + RADIUS; else if (m === dz0) p.z = s.z0 - RADIUS; else p.z = s.z1 + RADIUS;
+  }
+}
+
+// ---------------------------------------------------------------- player
+const P = {
+  pos: new THREE.Vector3(SHOT.x, 0, SHOT.z), vel: new THREE.Vector3(), yaw: SHOT.yaw, pitch: SHOT.pitch, roll: SHOT.roll,
+  grounded: false, groundRef: null, fallStart: 0, fov: 72, nerve: 1, stepAcc: 0, inside: false, onRoof: false,
+  checkpoint: { x: SHOT.x, y: 0, z: SHOT.z, yaw: SHOT.yaw }, wind: new THREE.Vector3(), stumble: new THREE.Vector3(), stumbleT: 0, thrown: null,
+  place(x, y, z, yaw, pitch) {   // teleport without carrying over a fall
+    this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = pitch; this.roll = 0;
+    this.grounded = false; this.groundRef = null; this.fallStart = y; this.wind.set(0, 0, 0); this.stumbleT = 0; this.thrown = null;
+  },
+};
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true;
+  if ((e.code === 'F8' || (e.code === 'End' && e.shiftKey)) && G.state === 'play' && !COL.active) { G.skipToEnd(); e.preventDefault(); }
+  if (e.code === 'BracketLeft' || e.code === 'BracketRight') { SENS = clamp(SENS * (e.code === 'BracketLeft' ? 0.8 : 1.25), 0.0002, 0.01); try { localStorage.setItem('vertigo.sens', SENS); } catch (err) {} G.say(`mouse sensitivity ${Math.round(SENS / 0.0011 * 100)}%`, 1.5); } if (e.code === 'KeyE') G.use(); if (e.code === 'KeyR' && G.state === 'end') location.reload(); if (e.code === 'Space') e.preventDefault(); });
+addEventListener('keyup', e => { keys[e.code] = false; });
+let locked = false, noLock = false, dragging = false;
+const touchMove = { x: 0, y: 0 }, lookRate = { x: 0, y: 0 };   // pad deflections, -1..1 (y forward / up)
+let jumpQueuedT = -1;
+if (IS_TOUCH) {
+  const zone = $('zone'), pads = { L: $('padL'), R: $('padR') }, R = 52;
+  const touches = {};                                    // identifier -> { pad, t0, maxD }
+  const center = pad => { const r = pads[pad].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+  const setKnob = (pad, dx, dy) => { pads[pad].firstElementChild.style.transform = `translate(${dx}px, ${dy}px)`; };
+  const apply = (pad, t) => {
+    const c = center(pad); let dx = t.clientX - c.x, dy = t.clientY - c.y; const d = Math.hypot(dx, dy);
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    setKnob(pad, dx, dy);
+    if (pad === 'L') { touchMove.x = dx / R; touchMove.y = -dy / R; } else { lookRate.x = dx / R; lookRate.y = -dy / R; }
+    return d;
+  };
+  zone.addEventListener('touchstart', e => {
+    if (G.state === 'title') { G.begin(); e.preventDefault(); return; }
+    for (const t of e.changedTouches) {
+      const dL = Math.hypot(t.clientX - center('L').x, t.clientY - center('L').y), dR = Math.hypot(t.clientX - center('R').x, t.clientY - center('R').y);
+      const pad = dL < dR ? 'L' : 'R';                                         // nearest pad owns the touch: generous hit zones
+      if (Object.values(touches).some(o => o.pad === pad)) continue;
+      touches[t.identifier] = { pad, t0: performance.now(), maxD: 0 };
+      touches[t.identifier].maxD = apply(pad, t);
+    }
+    e.preventDefault();
+  }, { passive: false });
+  zone.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) { const o = touches[t.identifier]; if (!o) continue; o.maxD = Math.max(o.maxD, apply(o.pad, t)); }
+    e.preventDefault();
+  }, { passive: false });
+  const end = e => {
+    for (const t of e.changedTouches) { const o = touches[t.identifier]; if (!o) continue; delete touches[t.identifier];
+      setKnob(o.pad, 0, 0);
+      if (o.pad === 'L') touchMove.x = touchMove.y = 0; else lookRate.x = lookRate.y = 0; }
+  };
+  zone.addEventListener('touchend', end); zone.addEventListener('touchcancel', end);
+  $('buse').addEventListener('touchstart', e => { e.preventDefault(); if (G.state === 'title') G.begin(); else G.use(); }, { passive: false });
+  const bj = $('bjump');
+  bj.addEventListener('touchstart', e => { e.preventDefault(); jumpQueuedT = G.t; bj.classList.add('down'); }, { passive: false });
+  const bjUp = e => { e.preventDefault(); bj.classList.remove('down'); }; bj.addEventListener('touchend', bjUp); bj.addEventListener('touchcancel', bjUp);
+  // debug: three quick taps in the top-left corner = the F8 skip
+  let taps = [];
+  $('skiptap').addEventListener('touchstart', e => { const now = performance.now(); taps = taps.filter(t => now - t < 900); taps.push(now);
+    if (taps.length >= 3 && G.state === 'play' && !COL.active) { taps = []; G.skipToEnd(); } e.preventDefault(); }, { passive: false });
+}
+// full screen toggle (top right); the icon flips between enter / exit
+{ const fs = $('fs'), root = document.documentElement;
+  const on = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const draw = () => { fs.firstElementChild.innerHTML = on() ? '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>' : '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'; };
+  const toggle = e => { e.preventDefault(); e.stopPropagation();
+    if (on()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else { const req = root.requestFullscreen || root.webkitRequestFullscreen; if (req) { const p = req.call(root, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } } };
+  fs.addEventListener('click', toggle); fs.addEventListener('touchstart', toggle, { passive: false });
+  document.addEventListener('fullscreenchange', draw); document.addEventListener('webkitfullscreenchange', draw);
+  if (!(root.requestFullscreen || root.webkitRequestFullscreen)) fs.style.display = 'none';   // iOS Safari on iPhone has no fullscreen API
+}
+let SENS = 0.0011;   // radians per pixel; [ and ] adjust it, and the choice is remembered
+try { const v = parseFloat(localStorage.getItem('vertigo.sens')); if (v > 0) SENS = v; } catch (e) {}
+// pointer lock when the page allows it; otherwise (embedded frames) hold the mouse button to look
+function grabPointer() {
+  if (IS_TOUCH) { noLock = true; locked = true; return; }
+  if (noLock) return;
+  let p; try { p = $('c').requestPointerLock(); } catch (e) { noLockFallback(); return; }
+  if (p && p.catch) p.catch(noLockFallback);
+}
+// without capture the mouse still turns you; the outer band of the window keeps turning you that way
+let edgeX = 0, edgeY = 0;
+function noLockFallback() {
+  if (noLock) return; noLock = true; locked = true; $('pause').style.display = 'none'; $('c').style.cursor = 'crosshair';
+  G.say("Mouse look without capture: push the cursor to the edge to keep turning. Open in its own tab for full capture.", 7);
+}
+document.addEventListener('pointerlockchange', () => { if (noLock || IS_TOUCH) return; locked = document.pointerLockElement === $('c'); if (G.state === 'play') $('pause').style.display = locked ? 'none' : 'flex'; });
+document.addEventListener('pointerlockerror', noLockFallback);
+document.addEventListener('mousemove', e => {
+  if (IS_TOUCH || !G.lookEnabled || !locked) return;
+  const k = SENS * (noLock ? 0.6 : 1); if (e.movementX || e.movementY) FIG.lastLookT = G.t;
+  P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.55, 1.55);
+  if (noLock && !IS_TOUCH && innerWidth && innerHeight) { // edge band: -1..1 with a soft (squared) ramp, zero inside the middle 84% of the window
+    const bx = 0.08 * innerWidth, by = 0.08 * innerHeight, sq = v => v * v * Math.sign(v);
+    edgeX = sq(e.clientX < bx ? -(1 - e.clientX / bx) : e.clientX > innerWidth - bx ? (1 - (innerWidth - e.clientX) / bx) : 0);
+    edgeY = sq(e.clientY < by ? -(1 - e.clientY / by) : e.clientY > innerHeight - by ? (1 - (innerHeight - e.clientY) / by) : 0);
+  }
+});
+document.addEventListener('mouseleave', () => { edgeX = edgeY = 0; });
+$('c').addEventListener('mousedown', () => { dragging = true; });
+addEventListener('mouseup', () => { dragging = false; });
+$('c').addEventListener('click', () => { if (G.state === 'title') G.begin(); else if (G.state === 'play' && !locked) grabPointer(); });
+$('title').addEventListener('click', () => G.begin());
+
+// ---------------------------------------------------------------- game state
+const G = {
+  state: 'loading', ascent: 1, lookEnabled: false, t: 0, falls: 0, startTime: 0, msgT: 0, hintT: 0, lastNote: -1,
+  lightsOut: 0, mastDone: false, gust: { t: 0, phase: 0, dir: new THREE.Vector3(), next: 14 }, roofSaid: false, doorSaid: false, heartT: 0,
+  intro: null, cine: null, totalClimb: 0,
+  say(text, dur = 4.5, note = false) { const m = $('msg'); m.textContent = text; m.className = note === 'speech' ? 'speech' : note ? 'note' : ''; m.style.opacity = 1; this.msgT = dur; },
+  // what you say out loud - never the same line twice in a row, never on top of itself
+  speak(lines, dur = 2.6, urgent = false) { if (!urgent && G.t - (this.spokeT || -9) < 3.2) return false; const pool = lines.filter(l => l !== this.lastLine); const l = pool[Math.floor(Math.random() * pool.length)];
+    this.lastLine = l; this.spokeT = G.t; this.say(l, dur, 'speech'); return true; },
+  hint(text) { const h = $('hint'); h.textContent = IS_TOUCH && text ? text.replace(/^E — /, '') : text; h.style.opacity = text ? 1 : 0; $('buse').classList.toggle('live', !!text); },
+  fade(v) { $('fade').style.opacity = v; },
+  setupAscent(n) {
+    this.ascent = n;
+    const pat = buildPattern(n);
+    SL.forEach((s, i) => { const st = slabState[i]; st.gone = pat.gap[i]; st.fallY = st.gone ? -1e6 : 0; st.crumble = pat.crumble[i]; st.timer = 0; st.shake = 0; st.respawn = 0; placeSlab(i);
+      slabMesh.setColorAt(i, st.crumble ? C_CRUMBLE : (s.landing ? C_LANDING : C_STONE)); });
+    slabMesh.instanceMatrix.needsUpdate = true; slabMesh.instanceColor.needsUpdate = true;
+    rebuildSolids();
+    // notes
+    for (const m of noteMeshes) m.parent.remove(m); noteMeshes.length = 0;
+    const notes = LINES.notes[n] || {};
+    for (const lap in notes) { const s = SL[lap * 16]; const m = new THREE.Mesh(noteGeo, noteMat);
+      m.position.set(s.x + s.inward[0] * 0.2 + (s.angle === 0 ? 0.6 : 0), s.top + 0.004, -s.y - s.inward[1] * 0.2 + (s.angle === 0 ? 0 : 0.6));
+      m.rotation.y = hash(lap, 99) * 0.6; m.userData.text = notes[lap]; m.userData.lap = +lap; m.userData.worldPos = m.position.clone(); attachToSeg(m); noteMeshes.push(m); }
+    // lamps: all on to begin with; ascent 3 puts them out behind you as you climb
+    for (const l of lampSpots) { l.on = true; l.flick = 1; l.mesh.material.color.set(0xffb54a); if (l.halo) l.halo.material.opacity = 0.55; }
+    scene.fog.density = n === 2 ? 0.0095 : n >= 3 ? 0.0034 : 0.0026;      // ascent 2: the shaft fills with haze
+    // where you wake, and what you see first: 1 - the base, looking up the outside; 2 - a landing, looking down; 3 - a landing, looking up the inside
+    const WAKE = n === 1 ? -1 : n === 2 ? 64 : 112;     // -1: the base
+    if (WAKE < 0) { P.place(SHOT.x, 0, SHOT.z, SHOT.yaw, SHOT.pitch); P.roll = SHOT.roll; P.checkpoint = { x: SHOT.x, y: 0, z: SHOT.z, yaw: SHOT.yaw }; }
+    else { const w = SL[WAKE], ix = w.inward[0], iz = -w.inward[1], px = w.x + ix * 0.6, pz = -w.y + iz * 0.6, yaw = Math.atan2(px, pz);   // facing the middle of the shaft
+      P.place(px, w.top, pz, yaw, n === 2 ? -1.15 : 1.15); P.roll = n === 2 ? 0.18 : -0.15;
+      P.checkpoint = { x: w.x, y: w.top, z: -w.y, yaw }; }
+    this.introRoll = P.roll; P.nerve = 1;
+    this.lightsOut = 0; this.mastDone = false; this.roofSaid = false; this.doorSaid = WAKE >= 0; this.lastNote = -1; this.gust.phase = 0; this.gust.next = 14;
+    FIG.reset();
+    if (n === 2) FIG.spawn(40, 1.0); else if (n >= 3) FIG.spawn(32, 1.25);
+    this.lightsOut = n - 1; this.setLights();
+    lampsMesh.material = MATS.lamps;
+    this.lookEnabled = false;
+    this.intro = { t: 0, lines: LINES.start[n] || LINES.start[3], li: 0 };
+  },
+  begin() {
+    if (this.state !== 'title') return;
+    Audio.init(); Audio.ctx.resume();
+    $('title').style.opacity = 0; setTimeout(() => $('title').style.display = 'none', 1300);
+    grabPointer();
+    this.state = 'play'; this.startTime = performance.now();
+    for (const id of ['reticle', 'alt', 'nerve', 'nervelbl', 'lights']) $(id).classList.remove('hidden');
+    if (SAVE.data) SAVE.restore(); else this.intro.t = 0.001;
+  },
+  respawn(kind) {
+    this.state = 'dead'; this.fade(1); Audio.thud(); P.thrown = null; FIG.grab = null;
+    this.say((kind === 'thrown' ? LINES.thrown : LINES.fall)[Math.min(this.falls, 2)], 4);
+    setTimeout(() => {
+      const c = P.checkpoint; P.place(c.x, c.y + 0.02, c.z, c.yaw, 0.1); P.nerve = 0.8;
+      if (FIG.active) FIG.spawn(40, FIG.speed);                     // it starts again from a few laps down
+      rebuildSolids(); this.state = 'play'; this.fade(0);
+    }, 1600);
+  },
+  use() {
+    if (this.state !== 'play' || this.cine || !this.nearMast() || this.mastDone) return;
+    this.lightsOut++; Audio.off(); this.setLights();
+    this.say(['', 'One.', 'Two.', 'Three.'][this.lightsOut], 2.5); this.hint(''); this.mastDone = true;
+    if (this.lightsOut >= 3) { this.cine = { t: 0, kind: 'collapse' }; FIG.startDisperse(); COL.start(); }
+    else { this.cine = { t: 0, kind: 'rush' }; FIG.startRush(); }
+  },
+  setLights() { const cols = [0xfff6dc, 0xa89f8f, 0x4a4540, 0x0a0a0a]; MATS.lamps.color.set(cols[this.lightsOut]);
+    mastHalos.forEach((h, k) => h.material.opacity = k < 3 - this.lightsOut ? 0.75 : 0);
+    [...$('lights').children].forEach((el, k) => el.classList.toggle('done', k < this.lightsOut)); },
+  skipToEnd() {   // debug: straight to the roof of the last ascent, next to the lights
+    this.setupAscent(3); this.intro = null; this.lookEnabled = true; this.roofSaid = true; this.doorSaid = true;
+    const [mx, my] = LAYOUT.mast; P.place(mx - 1.8, TOWER_H, -my - 0.5, Math.PI * 0.75, -0.1); P.roll = 0; P.nerve = 0.9;
+    P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: 0 };
+    this.say(IS_TOUCH ? "Skipped to the roof. Put them out: use, three times." : "Skipped to the roof. Put them out: E, three times.", 4);
+  },
+  nearMast() { const [mx, my] = LAYOUT.mast; return P.pos.y > TOWER_H - 1 && Math.hypot(P.pos.x - mx, P.pos.z + my) < 2.4; },
+  nextAscent() { this.setupAscent(this.ascent + 1); SAVE.write(); this.fade(1); setTimeout(() => { this.fade(0); this.intro.t = 0.001; this.state = 'play'; }, 1400); },
+};
+
+// ---------------------------------------------------------------- the collapse
+// sway -> the base gives and the stack pancakes down a segment at a time -> what is left topples, with you on it
+const COL = {
+  active: false, t: 0, phase: 'sway', axis: new THREE.Vector3(1, 0, -1).normalize(),   // tilts the top toward (+x, +z): where you first stood
+  tilt: 0, tiltV: 0, lean: 0, breakAt: [], broken: 0, topBreak: 0, attach: new THREE.Vector3(), attached: true, prevFeet: new THREE.Vector3(),
+  said: {}, impactT: -1, ended: false, eyeOff: 0, dip: 0, stillT: 0, debrisT: 0,
+  start() {
+    this.active = true; this.t = 0; this.phase = 'sway'; this.attached = true; this.broken = 0; this.tilt = 0; this.tiltV = 0; this.lean = 0; this.topBreak = 0;
+    this.breakAt = [12.0, 15.2, 18.4, 21.6];
+    this.prevFeet.copy(P.pos);
+    lampPool.forEach(l => l.intensity = 0); mastLight.intensity = 0;          // the roof goes dark with the lights
+    SAVE.clear();
+    Audio.rumbleLevel(0.35); Audio.drone(0.12, 55);
+  },
+  update(dt) {
+    if (!this.active) return;
+    this.t += dt; const t = this.t;
+    // 1. sway: up to ~6 m of travel at the roof, and the drone climbs with it
+    const amp = 0.08 * smooth(clamp(t / 12, 0, 1));
+    let sway = amp * Math.sin(t * 0.95);
+    if (this.phase === 'sway') Audio.drone(0.12 + 0.18 * clamp(t / 12, 0, 1), 55 + 40 * clamp(t / 12, 0, 1));
+    // 2. the base gives, one segment at a time
+    while (this.broken < this.breakAt.length && t >= this.breakAt[this.broken]) { this.crush(this.broken); this.broken++; }
+    this.eyeOff = 0;
+    for (let k = 0; k < this.broken; k++) {
+      const u = clamp((t - this.breakAt[k]) / 1.3, 0, 1), f = u * u;              // the floor falls at gravity and stops dead
+      const sq = lerp(1, 0.1, f);
+      for (const c of segGroups[k].children) if (c.isMesh) c.scale.y = sq;
+      if (k + 1 < NSEG) segGroups[k + 1].position.y = lerp(SEGZ[k + 1] - SEGZ[k], (SEGZ[k + 1] - SEGZ[k]) * 0.1, f);
+      if (u > 0 && u < 1) this.eyeOff += 0.55 * Math.sin(u * Math.PI);          // your stomach stays behind
+      if (u >= 1 && !this.said['thud' + k]) { this.said['thud' + k] = true; Audio.thud(); Audio.impact(); shakeKick = 1.6; fovKick = 28; this.dip = 0.4; flash(0.35);
+      }
+    }
+    this.dip = Math.max(0, this.dip - dt * 1.1); this.eyeOff -= this.dip;
+    // the grid goes down in rings, nearest first, each ring flickering then blinking out; the last one just before the tower goes over
+    if (cityPts && t > 1.0 && t < 24.5) {
+      const T0 = 1.6, T1 = 22.8, NB = 9, c = cityPts.geometry.attributes.color, pos = cityPts.geometry.attributes.position;
+      if (!this.gridStreet && t > T0) { this.gridStreet = true; streetHeads.forEach(h => { h.material.color.set(0x111111); h.userData.halo.material.opacity = 0; }); }
+      for (let i = 0; i < c.count; i++) {
+        const band = clamp(Math.floor((Math.hypot(pos.getX(i), pos.getZ(i)) - 40) / 62), 0, NB - 1);
+        const off = T0 + band * (T1 - T0) / (NB - 1) + hash(i, 77) * 0.35, blink = off - 0.45;
+        let k = 1; if (t >= off) k = 0; else if (t >= blink) k = (Math.floor((t - blink) / 0.075) + Math.floor(hash(i, 78) * 2)) % 2 ? 0.1 : 1;
+        c.setXYZ(i, cityBase[i * 3] * k, cityBase[i * 3 + 1] * k, cityBase[i * 3 + 2] * k); }
+      c.needsUpdate = true; }
+    // 3. a beat of nothing, then the topple
+    if (this.phase === 'sway' && this.broken === this.breakAt.length && t > this.breakAt[this.breakAt.length - 1] + 2.2) { this.phase = 'still'; this.stillT = t; Audio.hush(1.6); Audio.drone(0, 55); }
+    if (this.phase === 'still') { sway *= Math.max(0, 1 - (t - this.stillT) * 3); if (t > this.stillT + 1.8) { this.phase = 'topple'; this.tiltV = 0.05; Audio.rumbleLevel(0.9); Audio.scream(true); flash(0.15); } }
+    if (this.phase === 'topple') {
+      // pieces of the parapet come away past your face; your eyes are dragged toward the ground
+      this.debrisT -= dt; if (this.debrisT <= 0 && this.attached) { this.debrisT = 0.12; this.burst(NSEG - 1, SEGZ[NSEG] - 1.2, SEGZ[NSEG] + 0.6, 3); }
+      if (this.attached) P.pitch = lerp(P.pitch, -0.9, dt * 0.5 * this.tilt);
+      this.tiltV += (0.05 + 0.42 * Math.sin(Math.min(this.tilt, 1.5))) * dt;
+      this.tilt = Math.min(this.tilt + this.tiltV * dt, 1.5);
+      if (this.tilt > 0.6) this.topBreak = Math.min(this.topBreak + this.tiltV * 0.8 * dt, 0.8);   // the top snaps off like a chimney
+      if (this.tilt >= 1.5 && this.impactT < 0) { this.impactT = t; Audio.impact(); shakeKick = 2; this.dust(0, 40, 26); Audio.rumbleLevel(0.2); Audio.scream(false); }
+      sway = 0;
+    }
+    this.lean = lerp(this.lean, this.broken * 0.025, dt * 0.7);
+    segGroups[0].quaternion.setFromAxisAngle(this.axis, sway + this.lean + this.tilt);
+    segGroups[NSEG - 1].quaternion.setFromAxisAngle(this.axis, this.topBreak);
+    for (let k = 1; k < NSEG - 1; k++) segGroups[k].quaternion.setFromAxisAngle(this.axis, k < this.broken ? 0.02 * (hash(k, 5) - 0.5) : 0);
+    updateSegXforms();
+    // slabs: ride their segment or fly loose
+    slabState.forEach((st, i) => { const L = st.loose; if (L) { L.v.y -= 12 * dt; L.p.addScaledVector(L.v, dt); L.r.x += L.w.x * dt; L.r.y += L.w.y * dt; L.r.z += L.w.z * dt;
+      if (L.p.y < 0.2) { L.p.y = 0.2; L.v.set(0, 0, 0); L.w.set(0, 0, 0); } } placeSlab(i); });
+    slabMesh.instanceMatrix.needsUpdate = true;
+    this.updateDebris(dt);
+    // you: free to move on the top segment (P.pos stays in rest coordinates; the camera applies the segment's motion)
+    if (this.attached) {
+      updatePlayer(dt);
+      const feet = P.pos.clone().applyMatrix4(segXform[NSEG - 1]);
+      const rideV = feet.clone().sub(this.prevFeet).divideScalar(Math.max(dt, 1e-3)); this.prevFeet.copy(feet);
+      const offTop = P.pos.y < SEGZ[NSEG - 1] - 0.5;                       // walked or jumped off the top segment
+      if (this.tilt > 0.95 || offTop) {
+        this.attached = false; P.pos.copy(feet);
+        const h = Math.hypot(rideV.x, rideV.z); if (h > 7) { rideV.x *= 7 / h; rideV.z *= 7 / h; }
+        P.vel.set(rideV.x + P.vel.x * 0.5, Math.max(rideV.y, -3) + (offTop ? P.vel.y : 1.5), rideV.z + P.vel.z * 0.5);
+        if (!offTop) Audio.step(true);
+      }
+    } else if (!this.ended) {
+      P.vel.y -= 12 * dt; P.pos.addScaledVector(P.vel, dt); P.roll += 2.6 * dt; P.pitch = clamp(P.pitch - 0.9 * dt, -1.5, 1.5);
+      if (P.pos.y < 1.0 && !this.ended) { this.ended = true; flash(0.6); $('fade').style.transition = 'opacity 1.2s ease'; G.fade(1); Audio.impact(); Audio.rumbleLevel(0); Audio.scream(false); Audio.drone(0, 55); Audio.fadeOut(3.0);
+        setTimeout(() => { G.state = 'end'; document.exitPointerLock(); for (const id of ['reticle', 'alt', 'nerve', 'nervelbl']) $(id).classList.add('hidden'); $('msg').style.opacity = 0; $('end').style.display = 'flex';
+          const secs = Math.round((performance.now() - G.startTime) / 1000);
+          $('endstat').textContent = `${Math.round(G.totalClimb)} m climbed · ${G.falls} fall${G.falls === 1 ? '' : 's'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; }, 3200); }
+    }
+    if (this.phase !== 'still') Audio.rumbleLevel(this.phase === 'topple' ? 0.9 : 0.35 + 0.4 * Math.abs(sway) / 0.08); else Audio.rumbleLevel(0);
+  },
+  crush(k) {
+    Audio.crack(); Audio.rumble(); Audio.collapseHit(); shakeKick = 1.5;
+    const z0 = SEGZ[k], z1 = SEGZ[k + 1];
+    slabState.forEach((st, i) => { if (slabSeg[i] !== k || st.gone) return; const s = SL[i];
+      const p = new THREE.Vector3(s.x, s.top - s.th / 2, -s.y).applyMatrix4(segXform[k]);
+      st.loose = { p, v: new THREE.Vector3((hash(i, 41) - 0.5) * 6, 1 + hash(i, 42) * 4, (hash(i, 43) - 0.5) * 6), r: new THREE.Vector3(0, s.angle, 0), w: new THREE.Vector3(hash(i, 44) * 4 - 2, 0, hash(i, 45) * 4 - 2) }; });
+    this.burst(k, z0, z1, 70); this.dust(z0, 14, 10);
+  },
+  // ---- debris and dust
+  debris: null, pieces: [], dusts: [],
+  initFx() {
+    this.debris = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), matte({ color: 0x8a7e6c, map: slabTex }), 420);
+    this.debris.castShadow = false; scene.add(this.debris);
+    for (let i = 0; i < 420; i++) { _m.makeScale(0, 0, 0); this.debris.setMatrixAt(i, _m); }
+    this.debris.instanceMatrix.needsUpdate = true;
+  },
+  burst(k, z0, z1, n) {
+    for (let j = 0; j < n; j++) {
+      const idx = this.pieces.length % 420; const side = Math.floor(Math.random() * 4);
+      const along = (Math.random() - 0.5) * 2 * B, y = z0 + Math.random() * (z1 - z0);
+      const p = side === 0 ? new THREE.Vector3(along, y, B) : side === 1 ? new THREE.Vector3(B, y, along) : side === 2 ? new THREE.Vector3(along, y, -B) : new THREE.Vector3(-B, y, along);
+      const nrm = side === 0 ? new THREE.Vector3(0, 0, 1) : side === 1 ? new THREE.Vector3(1, 0, 0) : side === 2 ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(-1, 0, 0);
+      p.applyMatrix4(segXform[k]);
+      const size = 0.3 + Math.random() * 0.8;
+      this.pieces[idx] = { p, v: nrm.multiplyScalar(2 + Math.random() * 6).add(new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random() * 4, (Math.random() - 0.5) * 3)), r: new THREE.Vector3(Math.random() * 3, Math.random() * 3, 0), w: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3), size, idx, rest: false };
+      if (this.pieces.length < 420) this.pieces.length = Math.max(this.pieces.length, idx + 1);
+    }
+  },
+  dust(y, n, size) {
+    for (let j = 0; j < n; j++) { const a = Math.random() * Math.PI * 2, r = B + Math.random() * 6;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: clouds[0].material.map, color: 0x4a423a, transparent: true, opacity: 0.55, depthWrite: false }));
+      sp.position.set(Math.cos(a) * r, y + 1 + Math.random() * 3, Math.sin(a) * r); sp.scale.set(size * 0.4, size * 0.3, 1); sp.userData = { t: 0, size, vx: Math.cos(a) * 2.5, vz: Math.sin(a) * 2.5 };
+      scene.add(sp); this.dusts.push(sp); }
+  },
+  updateDebris(dt) {
+    let dirty = false;
+    for (const d of this.pieces) { if (!d || d.rest) continue; d.v.y -= 12 * dt; d.p.addScaledVector(d.v, dt); d.r.x += d.w.x * dt; d.r.y += d.w.y * dt; d.r.z += d.w.z * dt;
+      if (d.p.y < d.size / 2) { d.p.y = d.size / 2; d.rest = true; }
+      _e.set(d.r.x, d.r.y, d.r.z); _q.setFromEuler(_e); _s.set(d.size, d.size * 0.7, d.size * 1.3); _m.compose(d.p, _q, _s); this.debris.setMatrixAt(d.idx, _m); dirty = true; }
+    if (dirty) this.debris.instanceMatrix.needsUpdate = true;
+    for (let i = this.dusts.length - 1; i >= 0; i--) { const sp = this.dusts[i], u = sp.userData; u.t += dt; const k = u.t / 5;
+      sp.scale.set(u.size * (0.4 + k * 1.6), u.size * (0.3 + k * 1.1), 1); sp.position.x += u.vx * dt; sp.position.z += u.vz * dt; sp.position.y += 0.6 * dt;
+      sp.material.opacity = 0.55 * (1 - k); if (k >= 1) { scene.remove(sp); sp.material.dispose(); this.dusts.splice(i, 1); } }
+  },
+};
+let shakeKick = 0, fovKick = 0, vigPulse = 0, panicLevel = 0, scareKick = 0;
+function flash(a) { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = a; requestAnimationFrame(() => { f.style.transition = 'opacity 0.55s ease-out'; f.style.opacity = 0; }); }
+
+// ---------------------------------------------------------------- update
+const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3(), tmp = new THREE.Vector3(), losRay = new THREE.Raycaster();
+let lastTime = performance.now(), vertigo = 0, vertigoS = 0, shakeT = 0;
+
+function updatePlayer(dt) {
+  // input
+  fwd.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)); right.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
+  move.set(0, 0, 0);
+  const canMove = G.lookEnabled && locked && (!G.cine || COL.active) && !P.thrown;
+  let stickMag = 0;
+  if (canMove) {
+    if (keys.KeyW || keys.ArrowUp) move.add(fwd); if (keys.KeyS || keys.ArrowDown) move.sub(fwd);
+    if (keys.KeyD || keys.ArrowRight) move.add(right); if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+    if (IS_TOUCH && (touchMove.x || touchMove.y)) { move.addScaledVector(fwd, touchMove.y).addScaledVector(right, touchMove.x); stickMag = Math.min(1, Math.hypot(touchMove.x, touchMove.y)); }
+  }
+  const creep = keys.ShiftLeft || keys.ShiftRight;
+  const speed = creep ? 1.7 : 4.2;
+  if (move.lengthSq() > 0) move.normalize().multiplyScalar(stickMag ? lerp(1.2, 4.2, stickMag) : speed);   // a light thumb is the creep
+  // horizontal velocity: instant on ground, 55% control in the air
+  if (P.thrown === 'held') { P.vel.x = P.vel.z = 0; }
+  else if (P.thrown === 'air') { P.roll -= 2.4 * dt; P.pitch = clamp(P.pitch + (P.pitch < 1.2 ? 1.6 : -0.8) * dt, -1.5, 1.5); }
+  else if (P.grounded) { P.vel.x = move.x; P.vel.z = move.z; }
+  else { P.vel.x = lerp(P.vel.x, move.x, 0.55 * dt * 4); P.vel.z = lerp(P.vel.z, move.z, 0.55 * dt * 4); }
+  let wantJump = keys.Space || (jumpQueuedT >= 0 && G.t - jumpQueuedT < 0.25);
+  if (IS_TOUCH && !wantJump && P.grounded && canMove && Math.hypot(P.vel.x, P.vel.z) > 2.2) {
+    // assisted jump: about to run off an edge, and there is somewhere to land within a jump's reach
+    const hx = P.vel.x / Math.hypot(P.vel.x, P.vel.z), hz = P.vel.z / Math.hypot(P.vel.x, P.vel.z);
+    const ahead = groundAt(P.pos.x + hx * 0.5, P.pos.z + hz * 0.5, P.pos.y, 0.05).y;
+    if (ahead < P.pos.y - 1.0) { for (const d of [1.6, 2.3, 3.0]) { const g = groundAt(P.pos.x + hx * d, P.pos.z + hz * d, P.pos.y + 0.9, 0.2).y; if (g > P.pos.y - 0.6 && g <= P.pos.y + 0.9) { wantJump = true; break; } } }
+  }
+  if (canMove && wantJump && P.grounded) { jumpQueuedT = -1; P.vel.y = 5.4; P.grounded = false; P.fallStart = P.pos.y; Audio.step(true); }
+  // gravity
+  P.vel.y -= 12 * dt; if (P.vel.y < -40) P.vel.y = -40;
+  // stumble / wind
+  if (P.stumbleT > 0) { P.stumbleT -= dt; }
+  // integrate, axis by axis against the walls
+  const wx = P.vel.x + P.wind.x + (P.stumbleT > 0 ? P.stumble.x : 0), wz = P.vel.z + P.wind.z + (P.stumbleT > 0 ? P.stumble.z : 0);
+  let nx = P.pos.x + wx * dt; if (isFree(nx, P.pos.z, P.pos.y)) P.pos.x = nx;
+  let nz = P.pos.z + wz * dt; if (isFree(P.pos.x, nz, P.pos.y)) P.pos.z = nz;
+  pushOutSolids(P.pos);
+  if (!isFree(P.pos.x, P.pos.z, P.pos.y)) { // pushed into a wall by a solid: back off toward shaft center
+    const l = Math.hypot(P.pos.x, P.pos.z) || 1; P.pos.x -= P.pos.x / l * 0.05; P.pos.z -= P.pos.z / l * 0.05;
+  }
+  P.pos.y += P.vel.y * dt; if (P.pos.y < 0) P.pos.y = 0;   // the ground is the ground, however fast you arrive
+  // ground
+  const g = groundAt(P.pos.x, P.pos.z, P.pos.y - (P.thrown ? STEP - 0.05 : 0));   // thrown: no stepping up onto a passing edge
+  const wasGrounded = P.grounded;
+  if (P.vel.y <= 0 && g.y > -Infinity && P.pos.y <= g.y + 0.02) {
+    if (!wasGrounded) { // landed
+      const fell = P.fallStart - g.y;
+      if (fell > 5.5 && !COL.active) {
+        if (G.cine && G.cine.kind === 'rush') { G.cine = null; P.thrown = null; G.fade(1); Audio.thud(); G.say(LINES.roofThrow[Math.min(G.ascent - 1, 1)], 4); G.state = 'dead';
+          setTimeout(() => { G.nextAscent(); }, 1500); return; }
+        G.falls++; G.respawn(P.thrown ? 'thrown' : 'fall'); return; }
+      if (P.thrown === 'air') { P.thrown = null; P.roll = 0; FIG.grab = null; FIG.spawn(24, FIG.speed); G.say("It missed. It won't next time.", 3.5); }
+      if (fell > 1.2) Audio.step(true);
+    }
+    P.pos.y = g.y; P.vel.y = 0; P.grounded = true; P.groundRef = g.ref;
+  } else {
+    if (wasGrounded) { P.fallStart = P.pos.y; P.whooshed = false; }
+    if (!P.whooshed && P.vel.y < -7) { P.whooshed = true; Audio.whoosh(); }
+    P.grounded = false; P.groundRef = null;
+  }
+  // footsteps
+  if (P.grounded && (Math.abs(wx) + Math.abs(wz)) > 0.3) { P.stepAcc += Math.hypot(wx, wz) * dt; if (P.stepAcc > (creep ? 1.2 : 1.7)) { P.stepAcc = 0; Audio.step(false, creep || stickMag > 0 && stickMag < 0.5); } }   // step every 1.7 m: a long adult stride, not a child's patter
+  // zones
+  P.inside = Math.abs(P.pos.x) < A + 0.2 && Math.abs(P.pos.z) < A + 0.2 && P.pos.y < TOWER_H - 0.5;
+  P.onRoof = P.pos.y >= TOWER_H - 0.5 && Math.abs(P.pos.x) < B + 1 && Math.abs(P.pos.z) < B + 1;
+  // checkpoints (landings) + crumble slabs
+  if (P.groundRef && P.groundRef.slab !== undefined) {
+    const i = P.groundRef.slab, s = SL[i], st = slabState[i];
+    if (s.landing) { P.checkpoint = { x: s.x, y: s.top, z: -s.y, yaw: P.yaw }; if (G.cpSlab !== i) { G.cpSlab = i; SAVE.write(); } }
+    if (st.crumble && !st.gone) { if (st.timer === 0) Audio.crack(); st.timer += dt; st.shake = Math.min(1, st.timer / 0.9); }
+  }
+  if (P.onRoof) P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: P.yaw };
+}
+
+function updateSlabs(dt) {
+  let dirty = false, changed = false;
+  slabState.forEach((st, i) => {
+    if (!st.crumble) return;
+    if (!st.gone && st.timer > 0) {
+      if (st.timer > 0.95) { st.gone = true; st.fallV = 0; st.fallY = 0; st.respawn = 9; st.shake = 0; Audio.rumble(); changed = true; }
+      else if (P.groundRef?.slab !== i) { st.timer = Math.max(0, st.timer - dt * 0.5); st.shake = st.timer / 0.9; }
+      dirty = true; placeSlab(i);
+    } else if (st.gone && st.fallY > -1e5) {
+      st.fallV += 12 * dt; st.fallY += st.fallV * dt; dirty = true;
+      if (st.fallY > SL[i].top + 2) st.fallY = -1e6;
+      placeSlab(i);
+    }
+    if (st.gone && st.respawn > 0) { st.respawn -= dt; if (st.respawn <= 0) { st.gone = false; st.fallY = 0; st.timer = 0; st.shake = 0; changed = true; dirty = true; placeSlab(i); } }
+  });
+  if (dirty) slabMesh.instanceMatrix.needsUpdate = true;
+  if (changed) rebuildSolids();
+}
+
+function updateVertigo(dt) {
+  // how much open air is in front of and below the player
+  let v = 0;
+  if (G.lookEnabled && (P.inside || P.onRoof) && P.pos.y > 4) {
+    const look = Math.max(0, -P.pitch - 0.25) / 1.3;   // 0 .. 1 as you look down
+    tmp.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(0.75).add(P.pos);
+    const gh = groundAt(tmp.x, tmp.z, P.pos.y, 0.05).y;
+    const drop = P.pos.y - (gh > -Infinity ? gh : 0);
+    const edge = clamp((drop - 1.5) / 12, 0, 1);
+    v = look * Math.max(edge, P.grounded ? 0 : 0.6) * clamp((P.pos.y - 4) / 20, 0, 1);
+  }
+  if (COL.active) v = Math.max(v, clamp(COL.t / 10, 0.35, 1) * (COL.phase === 'topple' ? 1.3 : 1));
+  vertigo = v; vertigoS = lerp(vertigoS, v, 1 - Math.exp(-dt * 3));
+  if (COL.active) P.nerve = Math.max(0, P.nerve - dt * 0.12);
+  // nerve
+  if (v > 0.05) P.nerve -= dt * (0.11 + 0.22 * v) * (1 + 0.25 * (G.ascent - 1));
+  else if (P.pitch > -0.15 || !P.inside) P.nerve += dt * 0.12;
+  P.nerve = clamp(P.nerve, 0, 1);
+  if (P.nerve <= 0 && P.stumbleT <= 0 && P.grounded && G.state === 'play' && !COL.active) {
+    // knees go. a small push, in a random direction — usually towards the void, because that is where you were looking
+    const a = P.yaw + Math.PI + (Math.random() - 0.5) * 1.2;
+    P.stumble.set(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(1.6); P.stumbleT = 0.45; P.nerve = 0.3; Audio.thud();
+    G.say("Breathe. Look at the wall.", 3.5);
+  }
+
+}
+
+function updateGusts(dt) {
+  const g = G.gust;
+  if (G.ascent < 2 || !P.inside || P.pos.y < 8 || G.state !== 'play') { P.wind.multiplyScalar(Math.max(0, 1 - dt * 3)); return; }
+  g.next -= dt;
+  if (g.phase === 0 && g.next <= 0) { g.phase = 1; g.t = 0; // pick a direction: from the wall you are on, into the void
+    const s = P.groundRef?.slab !== undefined ? SL[P.groundRef.slab] : null;
+    if (s) g.dir.set(s.inward[0], 0, -s.inward[1]); else g.dir.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
+    g.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.8);
+    $('wind').classList.add('on'); }
+  if (g.phase === 1) { g.t += dt; if (g.t > 1.1) { g.phase = 2; g.t = 0; } }
+  if (g.phase === 2) { g.t += dt; const str = G.ascent >= 3 ? 2.3 : 1.7; const env = Math.sin(Math.min(1, g.t / 2.6) * Math.PI);
+    P.wind.copy(g.dir).multiplyScalar(str * env);
+    if (g.t > 2.6) { g.phase = 0; g.next = 11 + Math.random() * 9 - (G.ascent - 2) * 3; $('wind').classList.remove('on'); P.wind.set(0, 0, 0); } }
+}
+
+function updateNarrative(dt) {
+  if (G.msgT > 0) { G.msgT -= dt; if (G.msgT <= 0) $('msg').style.opacity = 0; }
+  // intro: hold the shot, roll levels out, then hand over the camera
+  if (G.intro && G.intro.t > 0) {
+    const I = G.intro; I.t += dt;
+    const k = smooth(clamp((I.t - 1.0) / 3.5, 0, 1));
+    P.roll = lerp(G.introRoll, 0, k);
+    if (I.t > 1.2 && I.li === 0) { G.say(I.lines[0], 4.2); I.li = 1; }
+    if (I.t > 6.0 && I.li === 1 && I.lines[1]) { G.say(I.lines[1], 4.2); I.li = 2; }
+    if (I.t > 10.5 && I.li === 2 && I.lines[2]) { if (!P.inside) G.say(I.lines[2], 4); I.li = 3; }
+    if (I.t > 4.5) G.lookEnabled = true;
+    if (I.t > 12) G.intro = null;
+  }
+  if (P.inside && !G.doorSaid && P.pos.y < 1) { G.doorSaid = true; G.say("Stairs. No railing.", 3.5); }
+  if (P.onRoof && !G.roofSaid) { G.roofSaid = true; G.say(LINES.roof[G.ascent] || LINES.roof[3], 4.5); }
+  // notes
+  for (const m of noteMeshes) { if (m.userData.lap !== G.lastNote && P.pos.distanceTo(m.userData.worldPos) < 1.4) { G.lastNote = m.userData.lap; G.say(m.userData.text, 6, true); } }
+  // mast
+  if (P.onRoof && G.nearMast() && !G.mastDone && !G.cine) G.hint('E — put it out'); else if (!G.mastDone) G.hint('');
+  // cinematics
+  if (G.cine) {
+    const c = G.cine; c.t += dt;
+    if (c.kind === 'rush') {
+      if (c.t > 1.4 && !c.said) { c.said = true; G.say("Behind you.", 2); }
+    } else if (c.kind === 'collapse') {
+      if (c.t > 1.0 && !c.said) { c.said = true; G.say("There.", 2.5); }
+      if (c.t > 5.5 && !c.said2) { c.said2 = true; G.say("It was the lights holding it up.", 4); }
+      if (c.t > 12.8 && !c.said3) { c.said3 = true; G.say("Don't stand still.", 3); }
+      if (COL.phase === 'still' && !c.said4) { c.said4 = true; G.say("…", 1.5); }
+      if (COL.phase === 'topple' && !c.said5) { c.said5 = true; G.say("Hold on to nothing.", 3); }
+    }
+  }
+}
+
+function updateCamera(dt) {
+  // fov: dolly-zoom outward as the vertigo takes hold; wide when falling
+  const falling = !P.grounded && P.vel.y < -6 ? clamp((-P.vel.y - 6) / 20, 0, 1) : 0;
+  fovKick = fovKick > 0 ? Math.max(0, fovKick - dt * 30) : Math.min(0, fovKick + dt * 30);
+  const targetFov = Math.min(128, 72 + 30 * vertigoS + 22 * falling + (COL.active ? 10 : 0) + (COL.phase === 'topple' ? 18 : 0) + fovKick);
+  P.fov = lerp(P.fov, targetFov, 1 - Math.exp(-dt * (fovKick !== 0 ? 12 : 2.5)));
+  camera.fov = P.fov; camera.updateProjectionMatrix();
+  // sway: worse with low nerve and high vertigo
+  shakeKick = Math.max(0, shakeKick - dt * 1.6);
+  const unease = (1 - P.nerve) * 0.6 + vertigoS * 0.5 + (COL.active ? 0.3 + 0.3 * Math.min(1, COL.t / 12) : 0) + shakeKick * 0.6;
+  shakeT += dt * (1.2 + unease * 2 + shakeKick * 30);
+  const sway = unease * (0.02 + 0.06 * unease);
+  const ox = Math.sin(shakeT * 1.7) * sway + Math.sin(shakeT * 4.3) * sway * 0.4;
+  const oy = Math.sin(shakeT * 2.9) * sway * 0.6;
+  const roll = P.roll + Math.sin(shakeT * 0.9) * unease * 0.05 + (P.stumbleT > 0 ? Math.sin(P.stumbleT * 20) * 0.08 : 0);
+  // camera moves slightly forward on vertigo (the classic push-in with the zoom-out)
+  if (COL.active && COL.attached) {   // on the top segment: rest-frame position and look, carried by the segment's motion
+    camera.position.set(P.pos.x + ox, P.pos.y + EYE + oy + COL.eyeOff, P.pos.z + oy * 0.5).applyMatrix4(segXform[NSEG - 1]);
+    _e.set(P.pitch, P.yaw, roll, 'YXZ'); camera.quaternion.setFromEuler(_e); segGroups[NSEG - 1].getWorldQuaternion(_q); camera.quaternion.premultiply(_q);
+    return;
+  }
+  camera.position.set(P.pos.x + ox + (-Math.sin(P.yaw)) * vertigoS * 0.25, P.pos.y + EYE + oy - (P.stumbleT > 0 ? 0.25 : 0), P.pos.z + oy * 0.5 + (-Math.cos(P.yaw)) * vertigoS * 0.25);
+  camera.rotation.set(P.pitch, P.yaw, roll);
+}
+
+function updateLights() {
+  // ascent 2: the lamps flicker and gutter; ascent 3: they go out behind you, a lap and a bit below
+  if (G.ascent === 2) for (let i = 0; i < lampSpots.length; i++) { const l = lampSpots[i]; if (!l.on) continue;
+    const gutter = Math.sin(G.t * 0.7 + i * 2.13) > 0.975 ? 0.12 : 1;
+    l.flick = gutter * (0.72 + 0.28 * Math.abs(Math.sin(G.t * 19 + i * 5.1) * Math.sin(G.t * 6.3 + i)));
+    l.mesh.material.color.setRGB(1.0 * l.flick, 0.71 * l.flick, 0.29 * l.flick); if (l.halo) l.halo.material.opacity = 0.55 * l.flick; }
+  if (G.ascent >= 3 && !COL.active) { const pi = FIG.playerIdx(); for (const l of lampSpots) if (l.on && pi > l.idx + 20) { l.on = false; l.mesh.material.color.set(0x2a2018); if (l.halo) l.halo.material.opacity = 0; } }
+  // give the point-light pool to the nearest live lamps
+  const near = lampSpots.filter(l => l.on).map(l => ({ l, d: (l.x - P.pos.x) ** 2 + (l.y - P.pos.y) ** 2 + (l.z - P.pos.z) ** 2 })).sort((a, b) => a.d - b.d).slice(0, lampPool.length);
+  lampPool.forEach((pl, i) => { const n = near[i]; if (n) { pl.position.set(n.l.x, n.l.y, n.l.z); pl.intensity = (G.ascent >= 3 ? 0.65 : 0.9) * n.l.flick; } else pl.intensity = 0; });
+}
+
+function updateHud() {
+  const alt = (COL.active && COL.attached ? camera.position.y - EYE : P.pos.y) + (G.ascent - 1) * TOWER_H;
+  $('alt').firstElementChild.textContent = Math.max(0, Math.round(alt));
+  const lap = P.groundRef?.slab !== undefined ? SL[P.groundRef.slab].lap + 1 : (P.onRoof ? 'roof' : '');
+  $('lap').textContent = COL.active ? (COL.attached ? 'roof' : '') : lap ? (P.onRoof ? 'roof' : `lap ${lap} / ${Math.ceil(SL.length / 16)}`) : (G.ascent > 1 ? `ascent ${G.ascent}` : '');
+  const bar = $('nerve').firstElementChild; bar.style.transform = `scaleX(${P.nerve})`; bar.style.background = P.nerve < 0.35 ? '#e0563c' : '#f2c777';
+  vigPulse = Math.max(0, vigPulse - 0.08);
+  $('vig').style.opacity = clamp((1 - P.nerve) * 0.9 + vertigoS * 0.35 + vigPulse * 0.3, 0, 1);
+}
+
+function tick() {
+  requestAnimationFrame(tick);
+  if (innerWidth && innerHeight && (innerWidth !== sizedW || innerHeight !== sizedH)) fitCanvas();
+  const now = performance.now(); let dt = window.__dt || Math.min(0.05, (now - lastTime) / 1000); lastTime = now; G.t += dt;
+  // clouds always move; from the base, that is what makes the tower fall on you
+  for (const c of clouds) { c.position.x += c.userData.v * dt * 0.9; c.position.z += c.userData.v * dt * 0.42; if (c.position.x > 380) c.position.x = -380; if (c.position.z > 380) c.position.z = -380; }
+  if (IS_TOUCH && G.lookEnabled && G.state === 'play' && (lookRate.x || lookRate.y)) { FIG.lastLookT = G.t; const cx = lookRate.x * Math.abs(lookRate.x), cy = lookRate.y * Math.abs(lookRate.y);
+    P.yaw -= cx * 3.0 * dt; P.pitch = clamp(P.pitch + cy * 1.9 * dt, -1.55, 1.55); }
+  if (noLock && !IS_TOUCH && G.lookEnabled && G.state === 'play' && !G.cine) { P.yaw -= edgeX * 1.1 * dt; P.pitch = clamp(P.pitch - edgeY * 0.7 * dt, -1.55, 1.55); }
+  if (G.state === 'title') { P.pitch = SHOT.pitch + Math.sin(G.t * 0.35) * 0.012; P.yaw = SHOT.yaw + Math.sin(G.t * 0.21) * 0.01; }
+  if (G.state === 'play' || G.state === 'end') {
+    const prevY = P.pos.y;
+    if (G.state === 'play' && !COL.active) updatePlayer(dt);
+    if (G.state === 'play' && COL.active) COL.update(dt);
+    if (G.state === 'play') { if (P.pos.y > prevY && P.grounded) G.totalClimb += P.pos.y - prevY; }
+    if (!COL.active) { updateSlabs(dt); updateGusts(dt); FIG.update(dt); }
+    updateVertigo(dt); updateNarrative(dt);
+  }
+  updateCamera(dt); updateLights(); updateHud();
+  {   // panic: nerve gone, the drop in view, that thing in view and closing, or it on you
+    let stare = 0; if (FIG.active && FIG.axisPos && !FIG.grab && !FIG.rush) { const dx = FIG.axisPos.x - P.pos.x, dy = FIG.axisPos.y + 1 - (P.pos.y + EYE), dz = FIG.axisPos.z - P.pos.z, L = Math.hypot(dx, dy, dz) || 1;
+      const dot = (-Math.sin(P.yaw) * Math.cos(P.pitch) * dx + Math.sin(P.pitch) * dy - Math.cos(P.yaw) * Math.cos(P.pitch) * dz) / L; if (dot > 0.8) stare = clamp(1 - (FIG.playerIdx() - FIG.idx) / 24, 0, 1) * 0.9; }
+    const near = FIG.active && !FIG.grab && !FIG.rush ? clamp(1 - (FIG.playerIdx() - FIG.idx) / 30, 0, 1) : 0;   // how close it is, looked at or not
+    panicLevel = G.state === 'play' ? clamp(Math.max((1 - P.nerve) * 1.1, vertigoS * 1.2, stare, near * 0.95, COL.active ? 0.7 + 0.3 * Math.min(1, COL.t / 12) : 0, (FIG.grab || FIG.rush || P.thrown) ? 1 : 0), 0, 1) : 0;
+  }
+  // audio mix
+  if (Audio.master) {
+    const h = clamp(P.pos.y / TOWER_H, 0, 1);
+    const fall = (!P.grounded || (COL.active && !COL.attached)) ? clamp(-P.vel.y / 25, 0, 1) : 0;
+    const gust = COL.active ? (COL.phase === 'topple' ? 0.9 : COL.phase === 'still' ? 0 : 0.15 + 0.25 * Math.min(1, COL.t / 12)) : G.gust.phase === 1 ? G.gust.t / 1.1 * 0.5 : G.gust.phase === 2 ? 0.6 * Math.sin(Math.min(1, G.gust.t / 2.6) * Math.PI) + 0.2 : 0;
+    if (!Audio.faded) Audio.set(0.025 + 0.085 * h + (P.onRoof ? 0.07 : 0) + fall * 0.35, gust * 0.6, P.inside ? 0.08 : 0.02); else Audio.set(0, 0, 0);
+    Audio.panic(panicLevel, dt);
+    if (Audio.windFilter) Audio.windFilter.frequency.value = 300 + 500 * fall + 200 * h;
+  }
+  updateDust(dt);
+  // the image itself reacts: aberration and smear with vertigo, panic and falling; grain with panic; the frame pulses with the heart
+  if (gradePass) { const u = gradePass.uniforms, falling = (!P.grounded && P.vel.y < -6) || (COL.active && !COL.attached) ? clamp(-P.vel.y / 20, 0, 1) : 0;
+    scareKick = Math.max(0, scareKick - dt * 1.4);
+    const held = P.thrown === 'held' ? 1 : 0;   // while it is in your face the image stays sharp; the smear and the fringing come with the fall
+    u.time.value = G.t; u.aberr.value = held ? 0.006 : 0.0012 + 0.012 * Math.max(vertigoS, panicLevel * 0.7, Math.abs(fovKick) / 34, falling) + 0.05 * scareKick;
+    u.smear.value = held ? 0 : 0.65 * falling + (COL.phase === 'topple' && COL.active ? 0.35 : 0) + Math.abs(fovKick) / 34 * 0.6 + 0.18 * scareKick;
+    const onYou = (FIG.grab || (FIG.rush && FIG.rush.grab)) ? 1 : 0;
+    u.grain.value = (0.04 + 0.08 * panicLevel) * (1 - onYou * 0.6); u.vig.value = (0.5 + 0.2 * panicLevel) * (1 - onYou * 0.5); u.pulse.value = vigPulse; }
+  if (composer) composer.render(); else renderer.render(scene, camera);
+}
+
+// ---------------------------------------------------------------- go
+const audioReady = Audio.preload((done, n) => { $('clickgo').textContent = `loading sounds ${done} / ${n}`; });
+Promise.all([loadTower(), audioReady]).then(() => {
+  COL.initFx(); FIG.init();
+  G.setupAscent(1);
+  renderer.shadowMap.needsUpdate = true;
+  G.state = 'title';
+  if (!SAVE.data) $('clickgo').textContent = IS_TOUCH ? 'tap to begin' : 'click to begin';
+  $('loading').style.display = 'none';
+  $('fade').style.opacity = 0;
+  tick();
+}).catch(e => { $('loading').textContent = 'failed to load tower: ' + e; console.error(e); });
+</script>
