@@ -1,0 +1,3 @@
+const button=document.getElementById('optout'),status=document.getElementById('status');
+function update(){try{const off=localStorage.getItem('vertigo.analytics.optout')==='1';button.textContent=off?'Turn on gameplay statistics':'Turn off gameplay statistics in this browser';status.textContent=off?'Gameplay statistics are off. Reload open game tabs.':'Gameplay statistics are on.';}catch(_){status.textContent='This browser is blocking local storage.';}}
+button.onclick=()=>{try{const off=localStorage.getItem('vertigo.analytics.optout')==='1';localStorage.setItem('vertigo.analytics.optout',off?'0':'1');if(!off)localStorage.removeItem('vertigo.visitor.v1');update();}catch(_){status.textContent='Could not save the preference.';}};update();

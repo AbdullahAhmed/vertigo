@@ -6,6 +6,7 @@ import sys
 root = Path(sys.argv[1] if len(sys.argv)>1 else '.').resolve()
 port = int(sys.argv[2]) if len(sys.argv)>2 else 8765
 gate = '''<script>
+window.__review = true;
 // Test pages get isolated in-memory storage, so save/continue can be tested safely.
 const reviewStorage = new Map();
 Object.defineProperty(window,'localStorage',{value:{getItem:k=>reviewStorage.get(k)??null,setItem:(k,v)=>reviewStorage.set(k,String(v)),removeItem:k=>reviewStorage.delete(k)}});

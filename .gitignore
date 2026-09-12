@@ -6,3 +6,4 @@ build/__pycache__/
 build/sfx_src/
 build/deploy/
 .claude/
+analytics/config.php

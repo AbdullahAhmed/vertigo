@@ -75,6 +75,7 @@
     pointer-events: auto; min-height: 52px; padding: 14px 22px; border: 1px solid #f2c777; border-radius: 4px;
     background: #17130fee; color: #f2c777; font: 14px "IBM Plex Mono", monospace; cursor: pointer; white-space: nowrap; touch-action: manipulation; }
   #extinguish[hidden] { display: none; }
+  #privacy { pointer-events: auto; color: #aaa597; font-size: 10px; text-underline-offset: 3px; }
   #extinguish:hover, #extinguish:focus-visible { background: #483621; outline: 2px solid #fff3d6; outline-offset: 3px; }
   body.touch #extinguish { top: 42%; }
   #startover { pointer-events: auto; cursor: pointer; font-size: 11px; letter-spacing: 0.25em; opacity: 0.45; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; display: none; }
@@ -145,6 +146,7 @@
     <div id="startover">start over</div>
     <div class="keys" id="keysline">WASD move &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; space jump &nbsp;·&nbsp; shift creep &nbsp;·&nbsp; E use &nbsp;·&nbsp; [ ] sensitivity</div>
     <div class="warn">Contains heights, no railings, and a camera that does not always help. Headphones recommended.</div>
+    <a id="privacy" href="analytics/privacy.html" target="_blank" rel="noopener">Anonymous gameplay statistics · privacy &amp; opt out</a>
   </div>
   <div id="loading">loading</div>
 </div>
@@ -178,6 +180,7 @@ const TOWER_H = LAYOUT.H;              // 72.5 m
 const A = LAYOUT.A, B = LAYOUT.B;      // shaft half-width, outer half-width
 const EYE = 1.6, RADIUS = 0.32, STEP = 0.55;
 const SHOT = { x: -1.31087, z: B + 8.78625, yaw: -0.18735, pitch: 1.42126, roll: 1.38800, fov: 37.27853 };   // reference photo: flat front face, steep upward view, rolled framing
+__TELEMETRY__
 
 // ---------------------------------------------------------------- deterministic pattern per ascent
 function hash(i, s) { let h = (i * 374761393 + s * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -453,6 +456,7 @@ const MOBILE = {
 };
 if (IS_TOUCH) { document.body.classList.add('touch'); $('touch').classList.add('on'); $('clickgo').textContent = 'tap to begin';
   $('keysline').innerHTML = 'left pad: move &nbsp;·&nbsp; right pad: look &nbsp;·&nbsp; jump / use buttons'; }
+STATS.init(IS_TOUCH);
 renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.0 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
@@ -975,7 +979,7 @@ const FIG = {
     }
     // it reaches you on the stairs
     if (!this.grab && d < 1.15 && Math.abs(pos.y - P.pos.y) < 2.5 && P.grounded && P.inside && !P.onRoof) {
-      this.grab = { t: 0, pos: pos.clone() }; P.thrown = 'held'; Audio.grab(); shakeKick = 1.2; fovKick = 20;
+      this.grab = { t: 0, pos: pos.clone() }; P.thrown = 'held'; Audio.grab(); STATS.event('figure_grabs'); shakeKick = 1.2; fovKick = 20;
     }
     if (this.grab) { this.updateGrab(dt, this.grab, () => { const dir = tmp.set(-P.pos.x, 0, -P.pos.z).normalize(); return dir; }); return; }
     // smoke on the stairs; the body starts to show through it in the last few slabs
@@ -1197,6 +1201,7 @@ $('c').addEventListener('mousedown', () => { dragging = true; });
 addEventListener('mouseup', () => { dragging = false; });
 $('c').addEventListener('click', () => { if (G.state === 'title') G.begin(); else if (G.state === 'play' && !locked) grabPointer(); else if (!IS_TOUCH && G.nearMast()) G.use(); });
 $('title').addEventListener('click', () => G.begin());
+$('privacy').addEventListener('click', e => e.stopPropagation());
 $('extinguish').addEventListener('click', e => { e.stopPropagation(); G.use(); });
 
 // ---------------------------------------------------------------- game state
@@ -1240,6 +1245,7 @@ const G = {
   },
   begin() {
     if (this.state !== 'title') return;
+    STATS.begin(!!SAVE.data);
     Audio.init(); Audio.ctx.resume();
     $('title').style.opacity = 0; setTimeout(() => $('title').style.display = 'none', 1300);
     grabPointer();
@@ -1248,6 +1254,7 @@ const G = {
     if (SAVE.data) SAVE.restore(); else this.intro.t = 0.001;
   },
   respawn(kind) {
+    STATS.fall(STATS.lastLap ?? 0);
     if (IS_TOUCH) MOBILE.failed(this.ascent, P.checkpoint);
     this.state = 'dead'; this.fade(1); Audio.thud(); P.thrown = null; FIG.grab = null;
     this.say((kind === 'thrown' ? LINES.thrown : LINES.fall)[Math.min(this.falls, 2)], 4);
@@ -1259,7 +1266,9 @@ const G = {
     }, 1600);
   },
   use() {
+    if (this.state === 'play' && P.onRoof) STATS.add('button_presses');
     if (this.state !== 'play' || this.cine || !this.nearMast() || this.mastDone) return;
+    STATS.add('extinguishes'); STATS.event('collapse_starts');
     this.lightsOut = 3; Audio.off(); this.setLights();
     this.say("All three. Gone.", 2.5); this.hint(''); this.mastDone = true; $('extinguish').hidden = true;
     this.cine = { t: 0, kind: 'collapse' }; FIG.startDisperse(); COL.start();
@@ -1270,6 +1279,7 @@ const G = {
     mastHalos.forEach((h, k) => h.material.opacity = k < 3 - this.lightsOut ? 0.75 : 0);
     [...$('lights').children].forEach((el, k) => el.classList.toggle('done', k < this.lightsOut)); },
   skipToEnd() {   // debug: straight to the only roof
+    STATS.markTest();
     this.setupAscent(1); this.intro = null; this.lookEnabled = true; this.roofSaid = true; this.doorSaid = true;
     P.place(ROOF_SAFE.x, TOWER_H, ROOF_SAFE.z, 0, -0.1); P.roll = 0; P.nerve = 0.9; P.fov = 72;
     P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: 0 };
@@ -1364,7 +1374,7 @@ const COL = {
     } else if (!this.ended) {
       P.vel.y -= 12 * dt; P.pos.addScaledVector(P.vel, dt); P.roll += 2.6 * dt; P.pitch = clamp(P.pitch - 0.9 * dt, -1.5, 1.5);
       if (P.pos.y < 1.0 && !this.ended) { this.ended = true; flash(0.6); $('fade').style.transition = 'opacity 1.2s ease'; G.fade(1); Audio.impact(); Audio.rumbleLevel(0); Audio.windScream(false); Audio.drone(0, 55); Audio.fadeOut(3.0);
-        setTimeout(() => { G.state = 'end'; document.exitPointerLock(); for (const id of ['reticle', 'alt', 'nerve', 'nervelbl', 'lights']) $(id).classList.add('hidden'); $('msg').style.opacity = 0; $('end').style.display = 'flex';
+        setTimeout(() => { G.state = 'end'; STATS.event('completions'); document.exitPointerLock(); for (const id of ['reticle', 'alt', 'nerve', 'nervelbl', 'lights']) $(id).classList.add('hidden'); $('msg').style.opacity = 0; $('end').style.display = 'flex';
           const secs = Math.round((performance.now() - G.startTime) / 1000);
           $('endstat').textContent = `${Math.round(G.totalClimb)} m climbed · ${G.falls} fall${G.falls === 1 ? '' : 's'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; }, 3200); }
     }
@@ -1423,6 +1433,7 @@ const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.V
 let lastTime = performance.now(), vertigo = 0, vertigoS = 0, shakeT = 0;
 
 function updatePlayer(dt) {
+  const statsX = P.pos.x, statsY = P.pos.y, statsZ = P.pos.z;
   // input
   fwd.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)); right.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
   move.set(0, 0, 0);
@@ -1442,13 +1453,14 @@ function updatePlayer(dt) {
   else if (P.grounded) { P.vel.x = move.x; P.vel.z = move.z; }
   else { P.vel.x = lerp(P.vel.x, move.x, 0.55 * dt * 4); P.vel.z = lerp(P.vel.z, move.z, 0.55 * dt * 4); }
   let wantJump = keys.Space || (jumpQueuedT >= 0 && G.t - jumpQueuedT < 0.25);
+  const requestedJump = wantJump;
   if (IS_TOUCH && !wantJump && P.grounded && canMove && Math.hypot(P.vel.x, P.vel.z) > 2.2) {
     // assisted jump: about to run off an edge, and there is somewhere to land within a jump's reach
     const hx = P.vel.x / Math.hypot(P.vel.x, P.vel.z), hz = P.vel.z / Math.hypot(P.vel.x, P.vel.z);
     const ahead = groundAt(P.pos.x + hx * 0.5, P.pos.z + hz * 0.5, P.pos.y, 0.05).y;
     if (ahead < P.pos.y - 1.0) { for (const d of [1.6, 2.3, 3.0]) { const g = groundAt(P.pos.x + hx * d, P.pos.z + hz * d, P.pos.y + 0.9, 0.2).y; if (g > P.pos.y - 0.6 && g <= P.pos.y + 0.9) { wantJump = true; break; } } }
   }
-  if (canMove && wantJump && P.grounded) { jumpQueuedT = -1; P.vel.y = 5.4; P.grounded = false; P.fallStart = P.pos.y; Audio.step(true); }
+  if (canMove && wantJump && P.grounded) { STATS.add('jumps'); if (!requestedJump) STATS.add('auto_jumps'); jumpQueuedT = -1; P.vel.y = 5.4; P.grounded = false; P.fallStart = P.pos.y; Audio.step(true); }
   // gravity
   P.vel.y -= 12 * dt; if (P.vel.y < -40) P.vel.y = -40;
   // stumble / wind
@@ -1472,7 +1484,7 @@ function updatePlayer(dt) {
       if (fell > 5.5 && !COL.active) {
         G.falls++; G.respawn(P.thrown ? 'thrown' : 'fall'); return; }
       if (P.thrown === 'air') { P.thrown = null; P.roll = 0; FIG.grab = null; FIG.spawn(24, FIG.speed); G.say("It missed. It won't next time.", 3.5); }
-      if (fell > 1.2) Audio.step(true);
+      if (fell > 1.2) { Audio.step(true); if (!COL.active) STATS.add('short_drops'); }
     }
     P.pos.y = g.y; P.vel.y = 0; P.grounded = true; P.groundRef = g.ref; P.fallVoice = false;
   } else {
@@ -1489,9 +1501,10 @@ function updatePlayer(dt) {
   if (P.groundRef && P.groundRef.slab !== undefined) {
     const i = P.groundRef.slab, s = SL[i], st = slabState[i];
     if (s.landing) { P.checkpoint = { x: s.x, y: s.top, z: -s.y, yaw: P.yaw }; if (IS_TOUCH) MOBILE.reached(G.ascent, P.checkpoint); if (G.cpSlab !== i) { G.cpSlab = i; SAVE.write(); } }
-    if (st.crumble && !st.gone) { if (st.timer === 0) Audio.crack(); st.timer += dt; st.shake = Math.min(1, st.timer / (IS_TOUCH ? 1.5 : 0.9)); }
+    if (st.crumble && !st.gone) { if (st.timer === 0) { Audio.crack(); STATS.add('crumble_triggers'); } st.timer += dt; st.shake = Math.min(1, st.timer / (IS_TOUCH ? 1.5 : 0.9)); }
   }
   if (P.onRoof) P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: P.yaw };
+  STATS.step(statsX, statsY, statsZ, dt);
 }
 
 function updateSlabs(dt) {
@@ -1499,7 +1512,7 @@ function updateSlabs(dt) {
   slabState.forEach((st, i) => {
     if (!st.crumble) return;
     if (!st.gone && st.timer > 0) {
-      if (st.timer > (IS_TOUCH ? 1.5 : 0.95)) { st.gone = true; st.fallV = 0; st.fallY = 0; st.respawn = 9; st.shake = 0; Audio.rumble(); changed = true; }
+      if (st.timer > (IS_TOUCH ? 1.5 : 0.95)) { st.gone = true; st.fallV = 0; st.fallY = 0; st.respawn = 9; st.shake = 0; Audio.rumble(); STATS.add('slabs_broken'); changed = true; }
       else if (P.groundRef?.slab !== i) { st.timer = Math.max(0, st.timer - dt * 0.5); st.shake = st.timer / (IS_TOUCH ? 1.5 : 0.9); }
       dirty = true; placeSlab(i);
     } else if (st.gone && st.fallY > -1e5) {
@@ -1532,6 +1545,7 @@ function updateVertigo(dt) {
   else if (P.pitch > -0.15 || !P.inside) P.nerve += dt * 0.12;
   P.nerve = clamp(P.nerve, 0, 1);
   if (P.nerve <= 0 && P.stumbleT <= 0 && P.grounded && G.state === 'play' && !COL.active) {
+    STATS.add('nerve_stumbles');
     // knees go. a small push, in a random direction — usually towards the void, because that is where you were looking
     const a = P.yaw + Math.PI + (Math.random() - 0.5) * 1.2;
     P.stumble.set(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(1.6); P.stumbleT = 0.45; P.nerve = 0.3; Audio.thud(); Audio.voice('voice_gasp', .55);
@@ -1643,6 +1657,7 @@ function updateHud() {
 
 function tick() {
   requestAnimationFrame(tick);
+  STATS.frame();
   if (innerWidth && innerHeight && (innerWidth !== sizedW || innerHeight !== sizedH)) fitCanvas();
   const now = performance.now(); let dt = window.__dt || Math.min(0.05, (now - lastTime) / 1000); lastTime = now; G.t += dt;
   // clouds always move; from the base, that is what makes the tower fall on you

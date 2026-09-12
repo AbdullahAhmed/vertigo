@@ -70,6 +70,10 @@ or open it in its own tab.
 
 ## Rebuild
 
+Private first-party gameplay analytics are available to the owner at `/analytics/`. The game tracks anonymous
+visits, plays, movement, falls and progression; the dashboard and exports require a password. Players can
+opt out from the title's privacy link. See `analytics/README.md` for definitions, deployment and limitations.
+
 ```
 blender -b --python build_tower.py     # -> build/tower.glb, build/layout.json, build/preview.png
 node build.js                         # inlines geometry, layout, face artwork and the female voice bank

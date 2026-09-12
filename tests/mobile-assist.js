@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const source = fs.readFileSync('src/index.template.html', 'utf8');
 const mobileSource = source.slice(source.indexOf('const MOBILE = {'), source.indexOf('\nif (IS_TOUCH)', source.indexOf('const MOBILE = {')));
 const context = vm.createContext({Math});
+context.STATS={fall(){}};
 const mobile = vm.runInContext(mobileSource + '; MOBILE;', context);
 assert.equal(Math.hypot(...Object.values(mobile.pad(.1,.05))),0,'resting thumb has no drift');
 assert.equal(Math.hypot(...Object.values(mobile.pad(1,1))),1,'diagonal input is capped');

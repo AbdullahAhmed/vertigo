@@ -20,7 +20,7 @@ for(const [r,want] of [[.1,'voice_scream'],[.9,'voice_pain']]) {
 }
 // Exercise the actual respawn method: it must not append another vocal at impact.
 const respawn=source.slice(source.indexOf('  respawn(kind) {'),source.indexOf('\n  use() {',source.indexOf('  respawn(kind) {')));
-context.Audio=A;context.FIG={grab:null};context.LINES={fall:['fall'],thrown:['thrown']};context.setTimeout=()=>{};
+context.Audio=A;context.STATS={fall(){}};context.FIG={grab:null};context.LINES={fall:['fall'],thrown:['thrown']};context.setTimeout=()=>{};
 A.thud=()=>{}; const game=vm.runInContext('({'+respawn+'})',context); game.fade=()=>{};game.say=()=>{};game.falls=0;
 const count=events.length;game.respawn('fall');assert.equal(events.length,count,'respawn does not add pain after the fall vocal');
 // Run 90 seconds of ordinary movement on a simulated audio clock.

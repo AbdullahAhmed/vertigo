@@ -1,0 +1,7 @@
+Options -Indexes
+<FilesMatch "^(config|lib)\.php$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "\.(json|lock|zip|log|bak)$">
+  Require all denied
+</FilesMatch>
