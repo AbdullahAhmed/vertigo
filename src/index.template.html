@@ -180,7 +180,7 @@ function buildPattern(ascent) {
   const n = LAYOUT.slabs.length, gap = new Array(n).fill(false), crumble = new Array(n).fill(false);
   const laps = Math.floor(n / 16);
   const cfg = { 1: { gapFrom: 2, gaps: 1, crFrom: 5, crs: 1 }, 2: { gapFrom: 1, gaps: 2, crFrom: 2, crs: 2 }, 3: { gapFrom: 1, gaps: 2, crFrom: 1, crs: 3 } }[ascent] || { gapFrom: 1, gaps: 3, crFrom: 1, crs: 3 };
-  if (IS_TOUCH) { cfg.gaps = 0; cfg.crs += 1; cfg.crFrom = Math.min(cfg.crFrom, 3); }   // phones: no jump puzzles - more crumbling slabs instead
+  if (IS_TOUCH) cfg.gaps = 0;   // phones: no jump puzzles or compensating crumble penalty
   for (let lap = 1; lap < laps; lap++) {
     // candidates: positions 1..3 on each wall except the slab right after a landing; keep the last 6 slabs clean
     let cands = [];
@@ -430,6 +430,27 @@ const Audio = {
 let renderer; try { renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' }); }
 catch (e) { fail('WebGL is not available in this browser/frame: ' + e.message); throw e; }
 const IS_TOUCH = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && matchMedia('(pointer: coarse)').matches;
+// Touch assistance is local to the current landing; the authored roof events stay unchanged.
+const MOBILE = {
+  checkpoint: '', failures: 0, graceUntil: 0,
+  reset() { this.checkpoint = ''; this.failures = 0; this.graceUntil = 0; },
+  reached(ascent, cp) {
+    const key = `${ascent}:${cp.x}:${cp.y}:${cp.z}`;
+    if (key !== this.checkpoint) { this.checkpoint = key; this.failures = 0; }
+  },
+  failed(ascent, cp) { this.reached(ascent, cp); this.failures++; },
+  assistance() { return this.failures >= 5 ? 2 : this.failures >= 3 ? 1 : 0; },
+  recover(now) { this.graceUntil = now + 6 + this.assistance() * 2; },
+  pursuit(pace, base) {
+    return (pace > 0.4 ? Math.max(base * 0.65, pace * 0.78) : base) * (1 - this.assistance() * 0.15);
+  },
+  pad(x, y) {
+    const length = Math.hypot(x, y), dead = 0.14;
+    if (length <= dead) return { x: 0, y: 0 };
+    const scale = Math.min(1, (length - dead) / (1 - dead)) / length;
+    return { x: x * scale, y: y * scale };
+  },
+};
 if (IS_TOUCH) { document.body.classList.add('touch'); $('touch').classList.add('on'); $('clickgo').textContent = 'tap to begin';
   $('keysline').innerHTML = 'left pad: move &nbsp;·&nbsp; right pad: look &nbsp;·&nbsp; jump / use buttons'; }
 renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.0 : 1.5));
@@ -902,11 +923,12 @@ const FIG = {
     const pIdx = this.playerIdx();
     // pace: faster than you when you stand still, about your pace when you move - stopping is what lets it gain
     const pSlabs = Math.hypot(P.vel.x, P.vel.z) / LAYOUT.slabLen;
-    const want = pSlabs > 0.4 ? Math.max(this.baseSpeed, pSlabs * 0.95) : this.baseSpeed * 2.8;
+    const resting = IS_TOUCH && (!G.lookEnabled || G.t < MOBILE.graceUntil);
+    const want = IS_TOUCH ? (resting ? 0 : MOBILE.pursuit(pSlabs, this.baseSpeed)) : (pSlabs > 0.4 ? Math.max(this.baseSpeed, pSlabs * 0.95) : this.baseSpeed * 2.8);
     this.speed = lerp(this.speed, want, 1 - Math.exp(-dt * 1.5));
     if (!this.grab) {
       const cap = P.onRoof ? SL.length - 1 : pIdx - 0.5;
-      this.idx = Math.min(this.idx + this.speed * dt, Math.max(this.idx, cap), SL.length - 1);
+      this.idx = Math.min(this.idx + (resting ? 0 : this.speed * dt), Math.max(this.idx, cap), SL.length - 1);
     }
     const pos = this.posAt(this.idx, tmp);
     const d = Math.max(0, pIdx - this.idx), near = clamp(1 - d / 56, 0, 1);
@@ -1093,7 +1115,8 @@ if (IS_TOUCH) {
     const c = center(pad); let dx = t.clientX - c.x, dy = t.clientY - c.y; const d = Math.hypot(dx, dy);
     if (d > R) { dx *= R / d; dy *= R / d; }
     setKnob(pad, dx, dy);
-    if (pad === 'L') { touchMove.x = dx / R; touchMove.y = -dy / R; } else { lookRate.x = dx / R; lookRate.y = -dy / R; }
+    const input = MOBILE.pad(dx / R, -dy / R);
+    if (pad === 'L') { touchMove.x = input.x; touchMove.y = input.y; } else { lookRate.x = input.x; lookRate.y = input.y; }
     return d;
   };
   zone.addEventListener('touchstart', e => {
@@ -1117,6 +1140,9 @@ if (IS_TOUCH) {
       if (o.pad === 'L') touchMove.x = touchMove.y = 0; else lookRate.x = lookRate.y = 0; }
   };
   zone.addEventListener('touchend', end); zone.addEventListener('touchcancel', end);
+  const releasePads = () => { for (const id in touches) delete touches[id]; touchMove.x = touchMove.y = lookRate.x = lookRate.y = 0; setKnob('L', 0, 0); setKnob('R', 0, 0); jumpQueuedT = -1; };
+  addEventListener('blur', releasePads);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releasePads(); });
   $('buse').addEventListener('touchstart', e => { e.preventDefault(); if (G.state === 'title') G.begin(); else G.use(); }, { passive: false });
   const bj = $('bjump');
   bj.addEventListener('touchstart', e => { e.preventDefault(); jumpQueuedT = G.t; bj.classList.add('down'); }, { passive: false });
@@ -1183,6 +1209,7 @@ const G = {
   fade(v) { $('fade').style.opacity = v; },
   setupAscent(n) {
     this.ascent = n; Audio.stopVoice();
+    if (IS_TOUCH) MOBILE.reset();
     const pat = buildPattern(n);
     SL.forEach((s, i) => { const st = slabState[i]; st.gone = pat.gap[i]; st.fallY = st.gone ? -1e6 : 0; st.crumble = pat.crumble[i]; st.timer = 0; st.shake = 0; st.respawn = 0; placeSlab(i);
       slabMesh.setColorAt(i, st.crumble ? C_CRUMBLE : (s.landing ? C_LANDING : C_STONE)); });
@@ -1222,11 +1249,13 @@ const G = {
     if (SAVE.data) SAVE.restore(); else this.intro.t = 0.001;
   },
   respawn(kind) {
+    if (IS_TOUCH) MOBILE.failed(this.ascent, P.checkpoint);
     this.state = 'dead'; this.fade(1); Audio.thud(); P.thrown = null; FIG.grab = null;
     this.say((kind === 'thrown' ? LINES.thrown : LINES.fall)[Math.min(this.falls, 2)], 4);
     setTimeout(() => {
       const c = P.checkpoint; P.place(c.x, c.y + 0.02, c.z, c.yaw, 0.1); P.nerve = 0.8;
-      if (FIG.active) FIG.spawn(40, FIG.speed);                     // it starts again from a few laps down
+      if (FIG.active) FIG.spawn(40, IS_TOUCH ? FIG.baseSpeed : FIG.speed);
+      if (IS_TOUCH) MOBILE.recover(this.t);
       rebuildSolids(); this.state = 'play'; this.fade(0);
     }, 1600);
   },
@@ -1408,7 +1437,7 @@ function updatePlayer(dt) {
   }
   const creep = keys.ShiftLeft || keys.ShiftRight;
   const speed = creep ? 1.7 : 4.2;
-  if (move.lengthSq() > 0) move.normalize().multiplyScalar(stickMag ? lerp(1.2, 4.2, stickMag) : speed);   // a light thumb is the creep
+  if (move.lengthSq() > 0) move.normalize().multiplyScalar(stickMag ? 4.2 * Math.pow(stickMag, 1.25) : speed);   // touch speed rises continuously from rest
   // horizontal velocity: instant on ground, 55% control in the air
   if (P.thrown === 'held') { P.vel.x = P.vel.z = 0; }
   else if (P.thrown === 'air') { P.roll -= 2.4 * dt; P.pitch = clamp(P.pitch + (P.pitch < 1.2 ? 1.6 : -0.8) * dt, -1.5, 1.5); }
@@ -1427,7 +1456,8 @@ function updatePlayer(dt) {
   // stumble / wind
   if (P.stumbleT > 0) { P.stumbleT -= dt; }
   // integrate, axis by axis against the walls
-  const wx = P.vel.x + P.wind.x + (P.stumbleT > 0 ? P.stumble.x : 0), wz = P.vel.z + P.wind.z + (P.stumbleT > 0 ? P.stumble.z : 0);
+  const windScale = IS_TOUCH ? 0.5 : 1, stumbleScale = IS_TOUCH ? 0.5 : 1;
+  const wx = P.vel.x + P.wind.x * windScale + (P.stumbleT > 0 ? P.stumble.x * stumbleScale : 0), wz = P.vel.z + P.wind.z * windScale + (P.stumbleT > 0 ? P.stumble.z * stumbleScale : 0);
   let nx = P.pos.x + wx * dt; if (isFree(nx, P.pos.z, P.pos.y)) P.pos.x = nx;
   let nz = P.pos.z + wz * dt; if (isFree(P.pos.x, nz, P.pos.y)) P.pos.z = nz;
   pushOutSolids(P.pos);
@@ -1462,8 +1492,8 @@ function updatePlayer(dt) {
   // checkpoints (landings) + crumble slabs
   if (P.groundRef && P.groundRef.slab !== undefined) {
     const i = P.groundRef.slab, s = SL[i], st = slabState[i];
-    if (s.landing) { P.checkpoint = { x: s.x, y: s.top, z: -s.y, yaw: P.yaw }; if (G.cpSlab !== i) { G.cpSlab = i; SAVE.write(); } }
-    if (st.crumble && !st.gone) { if (st.timer === 0) Audio.crack(); st.timer += dt; st.shake = Math.min(1, st.timer / 0.9); }
+    if (s.landing) { P.checkpoint = { x: s.x, y: s.top, z: -s.y, yaw: P.yaw }; if (IS_TOUCH) MOBILE.reached(G.ascent, P.checkpoint); if (G.cpSlab !== i) { G.cpSlab = i; SAVE.write(); } }
+    if (st.crumble && !st.gone) { if (st.timer === 0) Audio.crack(); st.timer += dt; st.shake = Math.min(1, st.timer / (IS_TOUCH ? 1.5 : 0.9)); }
   }
   if (P.onRoof) P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: P.yaw };
 }
@@ -1473,8 +1503,8 @@ function updateSlabs(dt) {
   slabState.forEach((st, i) => {
     if (!st.crumble) return;
     if (!st.gone && st.timer > 0) {
-      if (st.timer > 0.95) { st.gone = true; st.fallV = 0; st.fallY = 0; st.respawn = 9; st.shake = 0; Audio.rumble(); changed = true; }
-      else if (P.groundRef?.slab !== i) { st.timer = Math.max(0, st.timer - dt * 0.5); st.shake = st.timer / 0.9; }
+      if (st.timer > (IS_TOUCH ? 1.5 : 0.95)) { st.gone = true; st.fallV = 0; st.fallY = 0; st.respawn = 9; st.shake = 0; Audio.rumble(); changed = true; }
+      else if (P.groundRef?.slab !== i) { st.timer = Math.max(0, st.timer - dt * 0.5); st.shake = st.timer / (IS_TOUCH ? 1.5 : 0.9); }
       dirty = true; placeSlab(i);
     } else if (st.gone && st.fallY > -1e5) {
       st.fallV += 12 * dt; st.fallY += st.fallV * dt; dirty = true;

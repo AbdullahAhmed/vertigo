@@ -5,7 +5,7 @@ const source = fs.readFileSync('src/index.template.html','utf8');
 const audio = source.slice(source.indexOf('const Audio = {'), source.indexOf('// ---------------------------------------------------------------- renderer'));
 let random = .1;
 const math = Object.create(Math); math.random = () => random;
-const context = vm.createContext({Math:math, P:{fallVoice:false,grounded:true,vel:{x:4.2,z:0}}, G:{state:'play'},
+const context = vm.createContext({Math:math, IS_TOUCH:false, P:{fallVoice:false,grounded:true,vel:{x:4.2,z:0}}, G:{state:'play'},
   lerp:(a,b,t)=>a+(b-a)*t, clamp:(v,a,b)=>Math.max(a,Math.min(b,v))});
 const A = vm.runInContext(audio+'; Audio;',context);
 const events=[];

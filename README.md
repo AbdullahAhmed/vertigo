@@ -40,8 +40,13 @@ or open it in its own tab.
   down the shaft / up the shaft). Ascent 2: haze and guttering lamps. Ascent 3: lamps die behind you.
 - **Save & continue** — progress (ascent, last landing, stats) is kept in the browser; the title
   offers *continue* or *start over*. Three lights in the HUD show the ascents done.
-- **Phones:** dual fixed pads, JUMP / USE buttons, no jump puzzles (extra crumbling slabs instead),
-  assisted edge-jumps as a safety net, fullscreen button top-right, triple-tap top-left = the F8 skip.
+- **Phones:** dual fixed pads with a 14% radial dead zone and continuous slow movement, JUMP / USE buttons,
+  no jump puzzles or extra crumble penalty, and 1.5-second crumble timing. Wind and nerve-stumble
+  displacement are halved; the visual/audio warnings remain. The figure pursues more gently and pauses
+  for 6 seconds after respawn. After 3 / 5 deaths at one landing, pursuit eases another 15% / 30% and
+  recovery lasts 8 / 10 seconds. This session-only assistance resets at a different landing or ascent.
+  Roof encounters and the ending retain their original timing. Desktop tuning is unchanged.
+  Assisted edge-jumps remain a safety net; fullscreen is top-right, triple-tap top-left = the F8 skip.
 - **Debug:** `F8` (or `Shift+End`) during play skips to the roof of ascent 3 beside the lights.
 - **Falls** over 5.5 m send you back to the last landing. The HUD shows actual height;
   the ending separately reports total distance climbed across ascents.

@@ -71,6 +71,15 @@ function runChecks(){
   reviewScene('ascent3');check('altitude is actual tower height',+$('alt').firstElementChild.textContent<73);
   check('one physical bulb remains',mastBulbs.filter(b=>b.material.color.getHex()===0xfff6dc).length===1);
   check('mobile has no gaps',!IS_TOUCH||[1,2,3].every(n=>buildPattern(n).gap.every(v=>!v)));
+  reviewScene('stairs');P.place(B+10,0,B+10,0,0);P.grounded=true;P.wind.set(2,0,0);P.stumble.set(2,0,0);P.stumbleT=1;
+  const startX=P.pos.x;updatePlayer(.01);check('platform wind and stumble displacement',Math.abs(P.pos.x-startX-(IS_TOUCH?.02:.04))<.00001);
+  P.wind.set(0,0,0);P.stumbleT=0;
+  if(IS_TOUCH){const tiny=MOBILE.pad(.05,.05);touchMove.x=tiny.x;touchMove.y=tiny.y;updatePlayer(.01);check('thumb drift cannot move player',P.vel.lengthSq()===0);
+   touchMove.y=.25;updatePlayer(.01);check('partial thumb supports slow movement',Math.hypot(P.vel.x,P.vel.z)<1);touchMove.y=0;
+   reviewScene('stairs');FIG.spawn(10,.85);MOBILE.recover(G.t);const fi=FIG.idx;FIG.update(.1);check('respawn grace stops stair pursuit',FIG.idx===fi);}
+  else{keys.KeyW=true;updatePlayer(.01);check('desktop walking speed unchanged',Math.abs(P.vel.z+4.2)<.00001);keys.ShiftLeft=true;updatePlayer(.01);check('desktop creep speed unchanged',Math.abs(P.vel.z+1.7)<.00001);keys.KeyW=keys.ShiftLeft=false;}
+  reviewScene('stairs');const crumble=slabState.findIndex(st=>st.crumble);P.groundRef={slab:crumble};slabState[crumble].timer=1.1;updateSlabs(.01);
+  check('platform crumble threshold',slabState[crumble].gone===!IS_TOUCH);slabState[crumble].timer=1.51;updateSlabs(.01);check('mobile crumble still fails eventually',slabState[crumble].gone);
   Audio.stopVoice();let played=0;const play=Audio.play;Audio.play=function(...args){played++;return play.apply(this,args)};
   Audio.windScream(true);Audio.windScream(false);check('wind toggles never trigger vocals',played===0);Audio.play=play;
   Audio.voice('voice_breath');const breath=Audio.voiceSource;check('pain interrupts breathing',Audio.voice('voice_pain',.5,true)&&Audio.voiceSource!==breath);
