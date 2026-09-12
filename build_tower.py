@@ -144,9 +144,9 @@ def trim_build(k):
     def build(bm):
         z0, z1 = SEG_Z[k], SEG_Z[k + 1]
         for z in (14.0, 28.0, 42.0, 56.0):
-            if z0 <= z < z1: ring(bm, B, B + 0.35, z, z + 0.9)
+            if z0 <= z < z1: ring(bm, B, B + 0.12, z, z + 0.3)
         if k == len(SEG_Z) - 2:
-            ring(bm, B, B + 0.55, H - 1.6, H - 0.3)      # cornice
+            ring(bm, B, B + 0.24, H - 0.9, H - 0.3)      # shallow concrete cornice
         if k == 0:
             # plinth, with a gap for the doorway on the -Y face
             w, h = DOOR

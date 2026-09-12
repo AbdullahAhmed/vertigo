@@ -43,22 +43,35 @@ or open it in its own tab.
 - **Phones:** dual fixed pads, JUMP / USE buttons, no jump puzzles (extra crumbling slabs instead),
   assisted edge-jumps as a safety net, fullscreen button top-right, triple-tap top-left = the F8 skip.
 - **Debug:** `F8` (or `Shift+End`) during play skips to the roof of ascent 3 beside the lights.
-- **Falls** over 5.5 m send you back to the last landing. The HUD altitude keeps counting
-  across ascents.
+- **Falls** over 5.5 m send you back to the last landing. The HUD shows actual height;
+  the ending separately reports total distance climbed across ascents.
 - **Sound:** recorded CC0 samples in `sfx/` (wind outside and in the shaft, lamp hum, concrete footsteps,
-  heartbeats, frightened/heavy breathing, stone cracks and debris, building collapse, distant booms, body
-  falls, a falling whoosh, screams and growls, a switch) — see `sfx/CREDITS.md`. They are fetched and decoded
-  before the title lets you in; if they can't load (opening the file from disk), a procedural synth takes over.
+  heartbeats, stone cracks and debris, building collapse, distant booms, a falling whoosh and a switch).
+  All protagonist vocals are female recordings from tcrocker68's May 2014 collection, at original pitch.
+  Breathing yields to gasps, pain and screams; the creature uses separate non-vocal noise and spatial rumble.
+  Each fall randomly uses either the scream or pain reaction, once; respawn adds no second vocal.
+  Running and panic each have three breathing takes with no immediate repeats. Normal running leaves
+  4–8 seconds between takes; panic leaves 1.6–3.2 seconds. Ordinary breathing is mixed more quietly.
+  See `sfx/CREDITS.md` for sources and the performer-identification limitation. Environmental samples are fetched
+  before the title enables play, with per-file failure handling and a timeout. The female voice bank is also
+  embedded in the HTML; procedural ambience takes over if external fetches fail.
   Host `vertigo.html` and the `sfx/` folder together.
 - **Look:** bloom on the lamps, film grain, chromatic aberration and a radial smear that follow vertigo,
   panic and falling, a sodium/blue-shadow grade, a graded sky dome, normal-mapped concrete, lamp halos,
-  dust in the shaft, lit windows on the distant blocks. Phones skip the bloom.
+  dust in the shaft, lit windows on the distant blocks, continuous cloud cover, fine formwork and tie holes,
+  independent mast bulbs and an original figure-face texture. Phones skip the bloom. Collapse shadows update
+  at a capped rate, with grit preceding large debris; the image remains readable through the fall.
 
 ## Rebuild
 
 ```
 blender -b --python build_tower.py     # -> build/tower.glb, build/layout.json, build/preview.png
-node build.js                          # inlines them into vertigo.html from src/index.template.html
+node build.js                         # inlines geometry, layout, face artwork and the female voice bank
 ```
 
 `src/index.template.html` is the game; `vertigo.html` is the generated single-file build.
+
+The face source is `assets/figure-face.png` (see `assets/CREDITS.md`). Do not edit `vertigo.html` directly.
+For local review, run `python tests/review_server.py . 8765`, then open `/vertigo.html` for the game,
+`/tools/voice-audition.html` for isolated vocals, or `/review.html` for the scene checks.
+See `tests/README.md` for desktop, mobile-mode and audio-failure checks.

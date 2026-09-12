@@ -64,7 +64,7 @@
     text-shadow: 0 2px 12px rgba(0,0,0,0.9); }
   #msg.note { font-style: italic; color: #d9d2bd; }
   #msg.speech { color: #f4e6cc; font-size: clamp(16px, 1.9vw, 22px); letter-spacing: 0.04em; text-shadow: 0 2px 14px rgba(0,0,0,1); }
-  #msg.speech::before { content: "“"; opacity: 0.6; } #msg.speech::after { content: "”"; opacity: 0.6; }
+  #msg.speech { font-style: italic; }
   #hint { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font-size: 12px; letter-spacing: 0.2em;
     opacity: 0; transition: opacity 0.4s; text-transform: uppercase; color: #f2c777; }
   #alt { position: absolute; left: 22px; bottom: 20px; font-size: 13px; letter-spacing: 0.15em; opacity: 0.7; line-height: 1.7; }
@@ -167,7 +167,7 @@ else if (!THREE.GLTFLoader) fail('the model loader did not load (check the netwo
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = t => t * t * (3 - 2 * t);
-const TOWER_H = LAYOUT.H;              // 71 m
+const TOWER_H = LAYOUT.H;              // 72.5 m
 const A = LAYOUT.A, B = LAYOUT.B;      // shaft half-width, outer half-width
 const EYE = 1.6, RADIUS = 0.32, STEP = 0.55;
 const SHOT = { x: 3.2, z: B + 3.1, yaw: -0.45, pitch: 1.15, roll: -0.2 };   // the photo: at the foot of the face, looking up along the corner
@@ -200,8 +200,8 @@ function buildPattern(ascent) {
 
 // ---------------------------------------------------------------- narrative
 const LINES = {
-  start: { 1: ["You don't remember the walk here.", "The lights at the top. That's why you came.", "Find the door."],
-           2: ["You don't remember the first laps.", "Something is coming up the stairs.", "Don't stop."],
+  start: { 1: ["I don't remember coming here.", "Three lights. I remember three.", "Find the door."],
+           2: ["You don't remember the first laps.", "Something’s moving below me.", "Don't stop."],
            3: ["You have never left.", "It's faster now.", "Put them out."] },
   notes: { 1: { 2: "someone counted the steps here. the number is scratched out.",
                 4: "don't look down. i know. i know.",
@@ -211,7 +211,7 @@ const LINES = {
            2: { 5: "the wind comes from the inside.",
                 7: "it doesn't get tired. i do.",
                 9: "the roof is not the end. i was wrong about that." },
-           3: { 8: "it's you. it was always you, coming up behind.",
+           3: { 8: "i know that breathing.",
                 10: "last lap. don't look down. look down. it doesn't matter anymore." } },
   roof: { 1: "The roof. The wind. The three lights.", 2: "The roof again. They're brighter.", 3: "They are waiting." },
   mast: { 1: ["They're brighter than they looked from below.", "Much brighter."],
@@ -221,43 +221,68 @@ const LINES = {
   roofThrow: ["Over the edge. You don't remember the ground.", "Again. You don't remember the ground."],
 };
 
-// ---------------------------------------------------------------- audio (all procedural)
+// ---------------------------------------------------------------- audio: recorded female voice, CC0 environment, procedural fallback
+const VOICE_B64 = __VOICE_B64__;
+const FACE_B64 = '__FACE_B64__';
 const Audio = {
   ctx: null, master: null, wind: null, windGain: null, hum: null, heart: 0, gustGain: null, samples: null, loops: {},
-  // ---- recorded sound: CC0 samples in ./sfx, fetched and decoded before the title lets you in. If they cannot load (file://), the synth below carries on.
+  // Recorded CC0 environment and female voice; the voice bank also travels inside the HTML.
+  voices: {}, voiceUntil: 0, voiceSource: null,
   async preload(onProgress) {
+    const C = this.ctx || (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    const decode = ab => new Promise((resolve, reject) => C.decodeAudioData(ab, resolve, reject));
+    const get = async url => { const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
+      try { const r = await fetch(url, { signal: controller.signal }); if (!r.ok) throw new Error(`${url}: ${r.status}`); return await r.arrayBuffer(); } finally { clearTimeout(timer); } };
+    // Always decode the embedded female recordings, even when file:// prevents external fetches.
+    await Promise.all(Object.entries(VOICE_B64).map(async ([name, encoded]) => {
+      try { const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0)); this.voices[name] = await decode(bytes.buffer); }
+      catch (e) { console.warn('Voice could not decode:', name, e); }
+    }));
     try {
-      const man = await (await fetch('sfx/manifest.json', { cache: 'force-cache' })).json();
-      const names = []; for (const [k, v] of Object.entries(man.files)) { if (v.kind === 'set') names.push(...v.items); else names.push(k); }
-      const C = this.ctx || (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      const man = JSON.parse(new TextDecoder().decode(await get('sfx/manifest.json')));
+      this.manifest = man;
+      const names = Object.entries(man.files).flatMap(([k,v]) => v.role === 'protagonist' ? [] : v.kind === 'set' ? v.items : [k]);
       const out = {}; let done = 0;
-      await Promise.all(names.map(async n => { const ab = await (await fetch(`sfx/${n}.ogg`, { cache: 'force-cache' })).arrayBuffer();
-        out[n] = await new Promise((res, rej) => C.decodeAudioData(ab, res, rej)); done++; onProgress && onProgress(done, names.length); }));
-      this.samples = out; this.manifest = man; return true;
-    } catch (e) { console.warn('samples unavailable, using the synth', e); this.samples = null; return false; }
+      await Promise.all(names.map(async n => { try { out[n] = await decode(await get(`sfx/${n}.ogg`)); }
+        catch (e) { console.warn('Sound unavailable:', n); }
+        finally { onProgress?.(++done, names.length); } }));
+      this.samples = Object.keys(out).length ? out : null;
+    } catch (e) { console.warn('External sounds unavailable; procedural environment with embedded female voice.', e); this.samples = null; }
+    return !!this.samples;
   },
   play(name, vol = 1, rate = 1, opts = {}) {   // one-shot from the sample set; returns the gain node so it can be shaped
-    if (!this.master || !this.samples || !this.samples[name]) return null; const C = this.ctx;
-    const src = C.createBufferSource(); src.buffer = this.samples[name]; src.playbackRate.value = rate;
+    const buffer = this.voices[name] || this.samples?.[name]; if (!this.master || !buffer) return null; const C = this.ctx;
+    const src = C.createBufferSource(); src.buffer = buffer; src.playbackRate.value = rate;
     const g = C.createGain(); g.gain.value = vol; let node = src;
     if (opts.lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opts.lowpass; node.connect(f); node = f; }
-    node.connect(g); g.connect(this.master); src.start(C.currentTime, opts.offset || 0); return g;
+    node.connect(g); g.connect(opts.voice ? this.voiceBus : opts.creature ? this.creatureBus : this.worldBus);
+    if (opts.reverb) g.connect(this.reverbSend);
+    g.source = src; src.onended = () => { src.disconnect(); node.disconnect(); g.disconnect(); };
+    src.start(C.currentTime, opts.offset || 0); return g;
   },
-  pick(set) { const it = this.manifest.files[set].items; return it[Math.floor(Math.random() * it.length)]; },
+  pick(set) { const it = this.manifest.files[set].items.filter(n => this.samples[n]); return it[Math.floor(Math.random() * it.length)]; },
   loop(name, rate = 1, lowpass = 0) {   // a looping bed with its own gain, started silent
-    const C = this.ctx, src = C.createBufferSource(); src.buffer = this.samples[name]; src.loop = true; src.playbackRate.value = rate;
+    const C = this.ctx, src = C.createBufferSource(); src.buffer = this.samples[name] || C.createBuffer(1, 1, C.sampleRate); src.loop = true; src.playbackRate.value = rate;
     const g = C.createGain(); g.gain.value = 0; let node = src;
     if (lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node.connect(f); node = f; }
-    node.connect(g); g.connect(this.master); src.start(C.currentTime, Math.random() * (src.buffer.duration - 1)); return { src, g };
+    node.connect(g); g.connect(name === 'rumble' && rate === 0.8 ? this.creatureBus : this.worldBus); src.start(C.currentTime, Math.random() * Math.max(0, src.buffer.duration - 1)); return { src, g };
   },
   init() {
     if (this.master) return;
     const C = this.ctx || (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
-    this.master = C.createGain(); this.master.gain.value = this.samples ? 0.7 : 0.55; this.master.connect(C.destination);
+    this.master = C.createGain(); this.master.gain.value = this.samples ? 0.7 : 0.55; const limiter = C.createDynamicsCompressor(); limiter.threshold.value = -8; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = .003; limiter.release.value = .18;
+    this.master.connect(limiter); limiter.connect(C.destination);
+    this.worldBus = C.createGain(); this.worldBus.connect(this.master);
+    this.voiceBus = C.createGain(); this.voiceBus.connect(this.master);
+    this.creatureBus = C.createGain(); this.creatureFilter = C.createBiquadFilter(); this.creatureFilter.type = 'lowpass';
+    this.creaturePan = C.createStereoPanner(); this.creatureBus.connect(this.creatureFilter); this.creatureFilter.connect(this.creaturePan); this.creaturePan.connect(this.worldBus);
+    const impulse = C.createBuffer(2, Math.floor(C.sampleRate * 1.1), C.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const a = impulse.getChannelData(ch); for (let i = 0; i < a.length; i++) a[i] = (Math.random()*2-1) * Math.exp(-i / (C.sampleRate*.18)) * Math.min(1, i/(C.sampleRate*.025)); }
+    const verb = C.createConvolver(); verb.buffer = impulse;
+    this.reverbSend = C.createGain(); this.reverbSend.gain.value = .1; this.reverbSend.connect(verb); verb.connect(this.worldBus);
     if (this.samples) {   // the recorded beds
       this.loops.windOut = this.loop('wind_out'); this.loops.windIn = this.loop('wind_in'); this.loops.hum = this.loop('hum');
       this.loops.fig = this.loop('rumble', 0.8, 260); this.loops.col = this.loop('rumble', 1.0, 400); this.loops.drone = this.loop('drone');
-      this.loops.breath = this.loop('breath'); this.loops.breath2 = this.loop('breath2');
     }
     // wind: noise -> bandpass -> gain
     const buf = C.createBuffer(1, C.sampleRate * 4, C.sampleRate);
@@ -300,7 +325,7 @@ const Audio = {
   },
   fadeOut(dur) { if (!this.ctx) return; const t = this.ctx.currentTime; this.master.gain.cancelScheduledValues(t); this.master.gain.setValueAtTime(this.master.gain.value, t); this.master.gain.linearRampToValueAtTime(0, t + dur); this.faded = true; },
   hush(dur) { if (!this.ctx) return; const t = this.ctx.currentTime; this.master.gain.cancelScheduledValues(t); this.master.gain.setTargetAtTime(0.0, t, 0.05); this.master.gain.setTargetAtTime(0.55, t + dur, 0.15); },
-  scream(on) { if (!this.ctx) return; const t = this.ctx.currentTime; this.gustFilter.frequency.setTargetAtTime(on ? 1800 : 900, t, 1.5); this.gustFilter.Q.setTargetAtTime(on ? 6 : 2.5, t, 0.5); },
+  windScream(on) { if (!this.ctx) return; const t = this.ctx.currentTime; this.gustFilter.frequency.setTargetAtTime(on ? 1800 : 900, t, 1.5); this.gustFilter.Q.setTargetAtTime(on ? 6 : 2.5, t, 0.5); },
   impact() { if (this.samples) { this.play('boom', 1.0, 0.9 + Math.random() * 0.2); this.play(Math.random() < 0.5 ? 'debris' : 'debris2', 0.8); return; }
     this.tone(30, 1.8, 1.6, 'sine', 0.3); this.burst(120, 0.6, 1.4, 1.4, 'lowpass'); this.burst(900, 0.8, 0.5, 0.6); },
   whoosh() { if (this.samples) this.play('whoosh', 0.45, 0.95 + Math.random() * 0.1); else this.burst(500, 0.6, 1.6, 0.35); },
@@ -322,47 +347,71 @@ const Audio = {
     o.connect(g); g.connect(this.master); o.start(); o.stop(C.currentTime + dur + 0.05);
   },
   step(hard, soft) {   // recorded concrete footsteps; the synth is a soft low thud
-    if (this.samples) { this.play(this.pick(soft ? 'steps_soft' : 'steps'), hard ? 0.9 : soft ? 0.35 : 0.55, 0.92 + Math.random() * 0.16, { lowpass: 3800 }); return; }
+    if (this.samples) { this.play(this.pick(soft ? 'steps_soft' : 'steps'), hard ? 0.9 : soft ? 0.35 : 0.55, 0.92 + Math.random() * 0.16, { lowpass: 3800, reverb: P.inside && !P.onRoof }); return; }
     const f = (hard ? 60 : 52) + Math.random() * 6; this.tone(f, hard ? 0.18 : 0.15, hard ? 0.6 : 0.38, 'sine', 0.45);
     this.burst(200, 0.7, 0.08, hard ? 0.18 : 0.1, 'lowpass'); this.burst(2600, 1.0, 0.025, 0.015); },
-  figLevel(level, t) {   // a deep pulsing rumble, like something heavy on the stairs; growls when it is close
+  figLevel(level, t, dt = 1 / 60) {   // a deep pulsing rumble, like something heavy on the stairs; growls when it is close
     if (!this.master) return; const pulse = 0.35 + 0.65 * Math.pow(Math.abs(Math.sin(t * 3.1)), 3);
     if (this.loops.fig) { this.loops.fig.g.gain.setTargetAtTime(level * pulse * 1.2, this.ctx.currentTime, 0.06);
-      this.growlT = (this.growlT ?? 3) - 1 / 60; if (level > 0.3 && this.growlT <= 0) { this.growlT = 4 + Math.random() * 6; this.play(Math.random() < 0.5 ? 'growl' : 'growl2', level * 0.6, 0.8 + Math.random() * 0.3); } return; }
+      const pos = FIG.axisPos; if (pos) { const dx = pos.x-P.pos.x, dz = pos.z-P.pos.z, d = Math.hypot(dx,dz) || 1;
+        this.creaturePan.pan.setTargetAtTime(clamp((dx*Math.cos(P.yaw)-dz*Math.sin(P.yaw))/d, -.9, .9), this.ctx.currentTime, .12); }
+      this.creatureFilter.frequency.setTargetAtTime(FIG.los || FIG.rush ? 2200 : 420, this.ctx.currentTime, .15); return; }
     if (!this.figGain) return;
     this.figGain.gain.setTargetAtTime(level * pulse, this.ctx.currentTime, 0.06);
-    this.tickT = (this.tickT ?? 1) - 1 / 60;
+    this.tickT = (this.tickT ?? 1) - dt;
     if (level > 0.08 && this.tickT <= 0) { this.tickT = 0.9 + Math.random() * 2.2; const n = 3 + Math.floor(Math.random() * 5), v = Math.min(1, level * 1.6);
       for (let i = 0; i < n; i++) setTimeout(() => { this.burst(1500 + Math.random() * 900, 4, 0.028, v * 0.5); this.tone(180 + Math.random() * 60, 0.05, v * 0.25, 'square', 0.6); }, i * (55 + Math.random() * 45)); } },
-  breath(vol) { if (this.samples) return; this.burst(260, 0.5, 0.9, vol * 0.22, 'lowpass'); },
-  grab() { if (this.samples) { this.play('growl2', 1.0, 0.75); } this.burst(90, 0.8, 1.2, 1.0, 'lowpass'); },
-  scream() {   // a recorded scream over a growl; the synth is two detuned saws and a shriek
-    if (!this.ctx) return; const C = this.ctx, t = C.currentTime;
-    if (this.samples) { const two = Math.random() < 0.5; this.play(two ? 'scream2' : 'scream', two ? 0.32 : 0.5, 0.95 + Math.random() * 0.1); this.play('growl', 0.6, 0.7); this.burst(70, 0.8, 1.4, 1.0, 'lowpass'); return; }
-    for (const [f0, f1, det] of [[820, 230, 1], [830, 236, 1.01]]) { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * det, t); o.frequency.exponentialRampToValueAtTime(f1 * det, t + 0.55);
-      const bp = C.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.2;
-      const g = C.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.04); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
-      o.connect(bp); bp.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.75); }
-    this.burst(2600, 1.4, 0.5, 1.0); this.burst(70, 0.8, 1.4, 1.2, 'lowpass'); },
+  // The creature has no human vocal recording; its spatial rumble stays distinct from her voice.
+  breath(vol) { if (this.master) this.burst(260, .5, .9, vol * .08, 'lowpass'); },
+  grab() { this.burst(90, .8, .65, .28, 'lowpass'); this.voice('voice_gasp', .7, true); },
+  creatureAttack() { this.burst(2100, 1.3, .28, .22); this.burst(70, .8, .8, .4, 'lowpass'); },
+  voice(name, volume = .6, interrupt = false) {
+    if (!this.master || !this.voices[name]) return false;
+    const t = this.ctx.currentTime;
+    if (!interrupt && t < this.voiceUntil) return false;
+    if (this.voiceSource) { const old = this.voiceSource; old.gain.cancelScheduledValues(t); old.gain.setTargetAtTime(0, t, .015); try { old.source.stop(t+.06); } catch(e) {} }
+    this.voiceSource = this.play(name, volume, 1, { voice: true });
+    this.voiceUntil = t + this.voices[name].duration + .12;
+    return true;
+  },
+  fallReaction(volume = .65) {
+    if (P.fallVoice) return false;
+    P.fallVoice = true;
+    return this.voice(Math.random() < .5 ? 'voice_scream' : 'voice_pain', volume, true);
+  },
+  breathName(panicking) {
+    const takes = panicking ? ['voice_panic', 'voice_panic2', 'voice_panic3'] : ['voice_breath', 'voice_breath2', 'voice_breath3'];
+    const choices = takes.filter(name => name !== this.lastBreath && this.voices[name]);
+    return choices[Math.floor(Math.random() * choices.length)];
+  },
+  stopVoice() { if (this.voiceSource) { try { this.voiceSource.source.stop(); } catch(e) {} this.voiceSource = null; } this.voiceUntil = 0; this.exertion = 0; this.nextBreathAt = (this.ctx?.currentTime || 0) + 4 + Math.random()*4; },
   heartbeat(v = 1) {   // a recorded beat (two takes, alternated) with the blood surging past your ears under it
     if (this.samples) { this.beatN = (this.beatN || 0) + 1; this.play(this.beatN % 2 ? 'heart' : 'heart2', Math.min(1.4, v * 1.1), 0.95 + Math.random() * 0.08); }
     else { this.tone(48, 0.16, 0.9 * v, 'sine', 0.55); setTimeout(() => this.tone(44, 0.2, 0.7 * v, 'sine', 0.5), 160); }
     this.burst(260, 0.5, 0.42, 0.4 * v, 'lowpass'); vigPulse = 1; },
-  breathe(level) {   // inhale then exhale; shallower and faster as it climbs, a catch in it at the top
-    const gasp = level > 0.7; const inh = () => { this.burst(gasp ? 900 : 650, 1.6, gasp ? 0.16 : 0.32, 0.22 * level); if (gasp) setTimeout(() => this.burst(1000, 1.6, 0.12, 0.18 * level), 130); };
-    inh(); setTimeout(() => this.burst(380, 1.2, gasp ? 0.28 : 0.5, 0.2 * level, 'bandpass'), lerp(1300, 450, level)); },
-  panic(level, dt) {   // the whole body reacting: called every frame
+  panic(level, dt) {
     if (!this.master) return;
-    this.heartT = (this.heartT ?? 0) - dt; this.breathT = (this.breathT ?? 0) - dt;
-    if (level > 0.12 && this.heartT <= 0) { this.heartT = lerp(1.05, 0.4, clamp((level - 0.12) / 0.88, 0, 1)); this.heartbeat(0.25 + 1.55 * level * level); }   // quiet at first, pounding at the top
-    if (this.loops.breath) {   // recorded breathing: frightened take fades in with panic, the heavy take on top when it peaks; both quicken
-      const t = this.ctx.currentTime, k = clamp((level - 0.15) / 0.85, 0, 1);
-      this.loops.breath.g.gain.setTargetAtTime(k * 0.8, t, 0.5); this.loops.breath.src.playbackRate.setTargetAtTime(0.95 + 0.3 * k, t, 0.5);
-      this.loops.breath2.g.gain.setTargetAtTime(Math.max(0, k - 0.55) * 1.4, t, 0.5); this.loops.breath2.src.playbackRate.setTargetAtTime(1.0 + 0.25 * k, t, 0.5); return; }
-    if (level > 0.18 && this.breathT <= 0) { this.breathT = lerp(3.2, 1.05, clamp((level - 0.18) / 0.82, 0, 1)); this.breathe(level); } },
+    const t = this.ctx.currentTime;
+    this.worldBus.gain.setTargetAtTime(t < this.voiceUntil ? .68 : 1, t, .18);
+    this.heartT = (this.heartT ?? 0) - dt;
+    if (level > .18 && this.heartT <= 0) { this.heartT = lerp(1.15, .55, level); this.heartbeat(.2 + .6*level*level); }
+    const moving = P.grounded && Math.hypot(P.vel.x,P.vel.z) > 1;
+    this.exertion = lerp(this.exertion || 0, moving ? .35 : 0, 1-Math.exp(-dt*.3));
+    const breathLevel = Math.max(level, this.exertion);
+    const panicking = level > .65;
+    if (panicking && !this.wasPanicking) this.nextBreathAt = Math.min(this.nextBreathAt ?? t, t + 1.2);
+    this.wasPanicking = panicking;
+    if (G.state === 'play' && P.grounded && !P.thrown && breathLevel > .22 && t > Math.max(this.nextBreathAt || 0, this.voiceUntil + 1.2)) {
+      const name = this.breathName(panicking);
+      if (name && this.voice(name, .14 + breathLevel*.34)) {
+        this.lastBreath = name;
+        this.nextBreathAt = this.voiceUntil + (panicking ? 1.6 + Math.random()*1.6 : 4 + Math.random()*4);
+      }
+    }
+  },
   crack() { if (this.samples) { this.play('crack', 1.0, 0.9 + Math.random() * 0.2); return; } this.burst(2400, 0.8, 0.12, 0.5); this.burst(160, 1.0, 1.1, 0.7, 'lowpass'); },
   rumble() { if (this.samples) { this.play(Math.random() < 0.5 ? 'debris' : 'debris2', 0.9, 0.85 + Math.random() * 0.2); return; } this.burst(110, 0.8, 1.6, 0.9, 'lowpass'); },
-  thud() { if (this.samples) { this.play(Math.random() < 0.5 ? 'bodyfall' : 'bodyfall2', 0.9, 0.9 + Math.random() * 0.2); return; } this.tone(40, 0.5, 1.2, 'sine', 0.4); this.burst(200, 0.7, 0.4, 0.8, 'lowpass'); },
+  thud() { this.tone(40, .3, .55, 'sine', .4); this.burst(200, .7, .25, .32, 'lowpass'); },
   click() { if (this.samples) { this.play('switch', 0.9, 0.95 + Math.random() * 0.1); return; } this.burst(3000, 1.5, 0.05, 0.6); this.tone(1800, 0.06, 0.2, 'square', 0.5); },
   flare() { this.tone(220, 2.5, 0.35, 'sine', 4); this.tone(330, 2.5, 0.2, 'triangle', 3); },
   off() { this.tone(900, 0.5, 0.4, 'sine', 0.05); this.click(); },
@@ -382,12 +431,12 @@ let renderer; try { renderer = new THREE.WebGLRenderer({ canvas: $('c'), antiali
 catch (e) { fail('WebGL is not available in this browser/frame: ' + e.message); throw e; }
 const IS_TOUCH = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && matchMedia('(pointer: coarse)').matches;
 if (IS_TOUCH) { document.body.classList.add('touch'); $('touch').classList.add('on'); $('clickgo').textContent = 'tap to begin';
-  $('keysline').innerHTML = 'left pad: move &nbsp;·&nbsp; right pad: look &nbsp;·&nbsp; jump / use buttons &nbsp;·&nbsp; gaps: just keep running'; }
+  $('keysline').innerHTML = 'left pad: move &nbsp;·&nbsp; right pad: look &nbsp;·&nbsp; jump / use buttons'; }
 renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.0 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.shadowMap.autoUpdate = false;   // everything that casts is static: render the maps once after load
+renderer.shadowMap.autoUpdate = false;   // static until collapse; COL requests capped updates
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
 
 // per-pixel, non-specular material (Lambert is vertex-lit and the tower walls are single 70 m quads)
@@ -397,9 +446,17 @@ scene.background = new THREE.Color(0x05070f);
 scene.fog = new THREE.FogExp2(new THREE.Color(0x0a0d1c).convertSRGBToLinear().getHex(), 0.0026);   // fog colour is used in linear light
 // the sky: light-polluted warm brown at the horizon, blue-black overhead; a dome that follows the camera
 const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 12), new THREE.ShaderMaterial({
-  uniforms: { top: { value: new THREE.Color(0x020309).convertSRGBToLinear() }, mid: { value: new THREE.Color(0x070c1c).convertSRGBToLinear() }, horizon: { value: new THREE.Color(0x2a1b10).convertSRGBToLinear() }, glow: { value: 1.0 } },   // linear: the final pass converts to sRGB
+  uniforms: { top: { value: new THREE.Color(0x020309).convertSRGBToLinear() }, mid: { value: new THREE.Color(0x070c1c).convertSRGBToLinear() }, horizon: { value: new THREE.Color(0x2a1b10).convertSRGBToLinear() }, glow: { value: 1.0 }, cloudMap: { value: null }, time: { value: 0 }, cloudColor: { value: new THREE.Color(0x787970).convertSRGBToLinear() } },   // linear: the final pass converts to sRGB
   vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'uniform vec3 top, mid, horizon; uniform float glow; varying vec3 vP; void main(){ float h = clamp(vP.y, -0.05, 1.0); vec3 c = mix(mid, top, smoothstep(0.03, 0.5, h)); c = mix(horizon * glow, c, smoothstep(-0.01, 0.09, h)); gl_FragColor = vec4(c, 1.0); }',
+  fragmentShader: `uniform vec3 top, mid, horizon, cloudColor; uniform float glow, time; uniform sampler2D cloudMap; varying vec3 vP;
+    void main(){ vec3 ray=normalize(vP); float h=clamp(ray.y,-.05,1.0);
+      vec3 c=mix(mid,top,smoothstep(.03,.5,h));c=mix(horizon*glow,c,smoothstep(-.01,.09,h));
+      vec2 uv=ray.xz/max(.12,ray.y)*.28+vec2(time*.002,time*.0008);
+      float n=texture2D(cloudMap,uv).r*.76+texture2D(cloudMap,uv*2.0+vec2(.17,-time*.0006)).r*.24;
+      float cover=smoothstep(.41,.59,n)*smoothstep(.02,.17,h);
+      vec3 lit=cloudColor*mix(.35,1.1,smoothstep(.4,.75,n));
+      gl_FragColor=vec4(mix(c,lit,cover),1.0);
+    }`,
   side: THREE.BackSide, depthWrite: false, fog: false }));
 sky.renderOrder = -10; scene.add(sky);
 
@@ -445,6 +502,7 @@ addEventListener('resize', fitCanvas);
 // --- lights
 scene.add(new THREE.HemisphereLight(0x22305a, 0x1a120a, 0.3));
 scene.add(new THREE.AmbientLight(0x2c2218, 0.28));
+const moonFill = new THREE.DirectionalLight(0x77839d, .28); moonFill.position.set(-35,90,20); scene.add(moonFill);
 
 // sodium floods at the base, aimed up the faces (that orange-from-below wash in the photo)
 function sodiumFlood(x, z, tx, tz) {
@@ -516,24 +574,31 @@ function lampPost(x, z) {
 lampPost(-9, B + 12); lampPost(13, B + 9); lampPost(B + 12, -8); lampPost(-B - 11, 5);
 
 // --- clouds: soft canvas blobs, drifting. Looking up from the base, they make the tower lean.
-const clouds = [];
-{
-  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const cx = cv.getContext('2d');
-  for (let k = 0; k < 9; k++) {
-    const x = 80 + Math.random() * 96, y = 80 + Math.random() * 96, r = 30 + Math.random() * 45;   // keep blobs inside the tile: no hard edges
-    const gr = cx.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    cx.fillStyle = gr; cx.fillRect(0, 0, 256, 256);
+// Irregular cloud banks: multi-scale noise breaks up the silhouette instead of repeating circular puffs.
+function cloudTexture(seed) {
+  const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const cx = cv.getContext('2d'), img = cx.createImageData(N,N);
+  const noise = (x,y) => { const ix=Math.floor(x), iy=Math.floor(y), fx=smooth(x-ix), fy=smooth(y-iy);
+    return lerp(lerp(hash(ix+iy*71,seed),hash(ix+1+iy*71,seed),fx),lerp(hash(ix+(iy+1)*71,seed),hash(ix+1+(iy+1)*71,seed),fx),fy); };
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++) {
+    let n=0, a=.55, f=3.5; for(let k=0;k<5;k++){n+=noise(x/N*f,y/N*f)*a;f*=2.03;a*=.5;}
+    const edge=Math.pow(Math.max(0,1-Math.pow((x/N-.5)*2,2)-Math.pow((y/N-.5)*2,2)),.65);
+    const density=smooth(clamp((n-.28)*2.8,0,1))*edge, v=155+75*n, i=(y*N+x)*4;
+    img.data[i]=v;img.data[i+1]=v;img.data[i+2]=v;img.data[i+3]=density*255;
   }
-  const tex = new THREE.CanvasTexture(cv);
-  for (let i = 0; i < 46; i++) {
-    const m = new THREE.SpriteMaterial({ map: tex, color: 0x9aa4b8, transparent: true, opacity: 0.55 + hash(i, 31) * 0.3, depthWrite: false, fog: true });
-    const s = new THREE.Sprite(m);
-    const sz = 70 + hash(i, 32) * 120; s.scale.set(sz, sz * (0.55 + hash(i, 33) * 0.4), 1);
-    s.position.set((hash(i, 34) - 0.5) * 700, 120 + hash(i, 35) * 160, (hash(i, 36) - 0.5) * 700);
-    s.userData.v = 2.2 + hash(i, 37) * 2.5;
-    scene.add(s); clouds.push(s);
-  }
+  cx.putImageData(img,0,0); const tex=new THREE.CanvasTexture(cv);tex.encoding=THREE.sRGBEncoding;return tex;
 }
+// A seamless noise sheet projected onto the sky gives cloud edges without billboard silhouettes.
+{
+  const N=256,cv=document.createElement('canvas');cv.width=cv.height=N;const c=cv.getContext('2d'),im=c.createImageData(N,N);
+  const noise=(x,y,period)=>{const ix=Math.floor(x),iy=Math.floor(y),fx=smooth(x-ix),fy=smooth(y-iy);
+    const h=(a,b)=>hash(((a%period)+period)%period+(((b%period)+period)%period)*71,917);
+    return lerp(lerp(h(ix,iy),h(ix+1,iy),fx),lerp(h(ix,iy+1),h(ix+1,iy+1),fx),fy);};
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){let n=0,a=.5,f=4;for(let k=0;k<6;k++){n+=noise(x/N*f,y/N*f,f)*a;a*=.5;f*=2;}const i=(y*N+x)*4;im.data[i]=im.data[i+1]=im.data[i+2]=n*255;im.data[i+3]=255;}
+  c.putImageData(im,0,0);const tex=new THREE.CanvasTexture(cv);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  sky.material.uniforms.cloudMap.value=tex;
+}
+const clouds = [{material:{map:cloudTexture(191)}}]; // reusable dust mask; sky has one draw call
 
 // dust: motes drifting in the shaft, only ever placed around the player so they catch the lamps
 const DUST_N = 420, dustPos = new Float32Array(DUST_N * 3), dustVel = [];
@@ -554,8 +619,16 @@ const tower = new THREE.Group(); scene.add(tower);
 const makeStone = (streaks, blotches = 60) => {
   const W = 256, Hh = 512, cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const c = cv.getContext('2d');
   c.fillStyle = '#bbb6ab'; c.fillRect(0, 0, W, Hh);
-  for (let y = 40; y < Hh; y += 160) { // formwork lines (the texture tiles every 8 m vertically)
+  if (streaks > 100) { // Wall formwork and tie holes; cast stair slabs have a continuous surface.
+  for (let y = 40; y < Hh; y += 128) {
     c.fillStyle = 'rgba(0,0,0,0.13)'; c.fillRect(0, y, W, 2); c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(0, y + 2, W, 1);
+  }
+  for (let x=0;x<W;x+=64) { c.fillStyle='rgba(30,25,20,.09)';c.fillRect(x,0,1,Hh); }
+  for(let y=42;y<Hh;y+=64) for(let x=22;x<W;x+=64) {
+    c.fillStyle='rgba(40,32,24,.24)';c.beginPath();c.arc(x,y,1.15,0,Math.PI*2);c.fill();
+    const stain=c.createLinearGradient(0,y,0,y+28);stain.addColorStop(0,'rgba(55,38,21,.12)');stain.addColorStop(1,'rgba(55,38,21,0)');
+    c.fillStyle=stain;c.fillRect(x-1,y+1,2,28);c.fillStyle='rgba(255,245,225,.2)';c.fillRect(x-1,y+1,2,1);
+  }
   }
   for (let i = 0; i < streaks; i++) { // vertical rain streaks
     const x = Math.random() * W, y0 = Math.random() * Hh, l = 20 + Math.random() * 220, a = 0.015 + Math.random() * 0.045;
@@ -563,9 +636,9 @@ const makeStone = (streaks, blotches = 60) => {
     c.beginPath(); c.moveTo(x, y0); c.lineTo(x + (Math.random() - 0.5) * 3, y0 + l); c.stroke();
   }
   for (let i = 0; i < blotches; i++) { // blotches
-    const x = Math.random() * W, y = Math.random() * Hh, r = 8 + Math.random() * 40;
+    const x = Math.random() * W, y = Math.random() * Hh, r = 5 + Math.random() * 24;
     const g = c.createRadialGradient(x, y, 0, x, y, r); const d = Math.random() < 0.6;
-    g.addColorStop(0, d ? 'rgba(60,45,30,0.16)' : 'rgba(255,245,225,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, d ? 'rgba(60,45,30,0.10)' : 'rgba(255,245,225,0.08)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
   }
   for (let i = 0; i < 4000; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; c.fillRect(Math.random() * W, Math.random() * Hh, 1.5, 1.5); }
@@ -600,13 +673,18 @@ const MATS = {
   lamps: new THREE.MeshBasicMaterial({ color: 0xfff6dc }),
   floor: matte({ color: 0x17161a }),
 };
-let lampsMesh = null;
+let lampsMesh = null; const mastBulbs = [];
 // the shell comes in stacked segments; each is a group parented to the one below, so tilting or crushing one moves everything above it
 const SEGZ = LAYOUT.segments, NSEG = SEGZ.length - 1;
 const segOf = y => { for (let k = NSEG - 1; k >= 0; k--) if (y >= SEGZ[k]) return k; return 0; };
 const segGroups = [];
 for (let k = 0; k < NSEG; k++) { const g = new THREE.Group(); g.position.y = k === 0 ? 0 : SEGZ[k] - SEGZ[k - 1]; (k === 0 ? tower : segGroups[k - 1]).add(g); segGroups.push(g); }
 function attachToSeg(obj, k = segOf(obj.position.y)) { obj.position.y -= SEGZ[k]; segGroups[k].add(obj); }
+// Individual materials make each physical bulb extinguish with its halo.
+for (const [x,y,z] of LAYOUT.lamps) {
+  const bulb = new THREE.Mesh(new THREE.BoxGeometry(.56,.48,.4), MATS.lamps.clone());
+  bulb.position.set(x,z,-y); attachToSeg(bulb,NSEG-1); mastBulbs.push(bulb);
+}
 const occluders = [];   // what can hide the thing from you: the shell segments and the slabs
 const segXform = segGroups.map(() => new THREE.Matrix4());   // rest-world -> current-world, per segment (identity until the collapse)
 function updateSegXforms() { tower.updateMatrixWorld(true); segGroups.forEach((g, k) => segXform[k].copy(g.matrixWorld).multiply(_m.makeTranslation(0, -SEGZ[k], 0))); }
@@ -618,7 +696,7 @@ function loadTower() {
       const meshes = []; gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
       for (const o of meshes) {
         const kind = o.name.replace(/\d+$/, '');
-        o.material = MATS[kind] || MATS.shell; if (o.material.map) boxUV(o.geometry); if (o.name === 'lamps') lampsMesh = o;
+        o.material = MATS[kind] || MATS.shell; if (o.material.map) boxUV(o.geometry); if (o.name === 'lamps') { lampsMesh = o; o.visible = false; }
         o.castShadow = o.receiveShadow = (o.name !== 'lamps');
         const m = /^(seg|trim)(\d+)$/.exec(o.name);
         if (m) attachToSeg(o, +m[2]); else if (o.name === 'floor') tower.add(o); else attachToSeg(o, NSEG - 1);   // parapet, mast, lamps ride the top
@@ -760,7 +838,7 @@ const FIG = {
     c2.fillStyle = fade; c2.fillRect(0, 0, W, Hh); c2.globalCompositeOperation = 'source-over';
     const cvF = cv2;
     const ftex = new THREE.CanvasTexture(cvF); ftex.encoding = THREE.sRGBEncoding;   // display-referred: keep it as dark as drawn
-    this.face = new THREE.Sprite(new THREE.SpriteMaterial({ map: ftex, transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false }));
+    this.face = new THREE.Sprite(new THREE.SpriteMaterial({ map: faceTexture || ftex, transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false }));
     this.face.renderOrder = 10; this.face.scale.set(0.6, 0.9, 1); scene.add(this.face);
     this.body = null;
   },
@@ -775,11 +853,11 @@ const FIG = {
   reset() { this.active = false; this.grab = null; this.rush = null; this.disperse = -1; this.show(null, 0, 0); if (this.face) this.face.material.opacity = 0; },
   // draw it: smoke around `pos` with tightness 0..1, body opacity 0..1
   show(pos, smokeA, bodyA, tight = 0) {
-    const t = G.t, dt = 1 / 60;
+    const t = G.t, dt = this.fxDt || 1 / 60;
     const emitting = !!pos && smokeA > 0;
     // how fast it is moving: a moving column leaves a tail and gets wilder
     let speed = 0; if (emitting && this.lastPos) speed = Math.min(12, this.lastPos.distanceTo(pos) / dt); if (emitting) { this.lastPos = this.lastPos || pos.clone(); this.lastPos.copy(pos); } else this.lastPos = null;
-    const rate = emitting ? (34 + speed * 6 + tight * 40) : 0, radius = lerp(0.42, 0.14, tight), lifeK = lerp(1, 0.5, tight);
+    const rate = emitting ? (34 + speed * 6 + tight * 40) : 0, radius = lerp(0.27, 0.12, tight), lifeK = lerp(1, 0.5, tight);
     this.emitAcc = emitting ? this.emitAcc + rate * dt : 0;
     const axis = emitting ? pos : this.axisPos;   // dead column: the last puffs keep swirling round where it was
     if (emitting) { this.axisPos = this.axisPos || new THREE.Vector3(); this.axisPos.copy(pos); }
@@ -802,21 +880,23 @@ const FIG = {
       q.v.multiplyScalar(1 - 1.6 * dt);
       q.p.addScaledVector(q.v, dt);
       const u = 1 - q.age / q.life, grow = q.tendril ? 1 + u * 1.5 : 0.7 + u * 1.3, fade = Math.min(1, u * 6) * Math.min(1, (1 - u) * 2.2);
-      const sz = q.size * grow * 1.9; q.sp.position.copy(q.p); q.sp.scale.set(sz, sz, 1); q.sp.material.rotation += q.spin * dt;
+      const sz = q.size * grow * 1.5; q.sp.position.copy(q.p); q.sp.scale.set(sz, sz, 1); q.sp.material.rotation += q.spin * dt;
       q.sp.material.opacity = smokeA * fade * (q.tendril ? 0.8 : 0.96) * (1 - bodyA * 0.6);
+      q.sp.visible = q.sp.material.opacity > .001;
     }
     // flickers of something inside it
     if (this.flashes) { this.flashT -= dt;
       if (emitting && bodyA < 0.3 && this.flashT <= 0) { this.flashT = 0.35 + Math.random() * 1.3; this.flashOn = 0.05 + Math.random() * 0.07;
-        for (const f of this.flashes) { f.position.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 0.3 + Math.random() * 1.7, pos.z + (Math.random() - 0.5) * 0.5); f.material.opacity = 0.3 + Math.random() * 0.5; }
-        this.light.position.set(pos.x, pos.y + 1.1, pos.z); this.light.intensity = 0.9 + Math.random() * 0.7; }
+        for (const f of this.flashes) { f.position.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 0.3 + Math.random() * 1.7, pos.z + (Math.random() - 0.5) * 0.5); f.material.opacity = .08 + Math.random() * .12; }
+        this.light.position.set(pos.x, pos.y + 1.1, pos.z); this.light.intensity = .12 + Math.random() * .12; }
       if (this.flashOn > 0) { this.flashOn -= dt; if (this.flashOn <= 0) { for (const f of this.flashes) f.material.opacity = 0; this.light.intensity = 0; } }
       if (!emitting || bodyA >= 0.3) { for (const f of this.flashes) f.material.opacity = 0; this.light.intensity = 0; } }
     if (this.after) { this.after.t += dt; this.after.sp.material.opacity = Math.max(0, 0.35 * (1 - this.after.t / 0.7)); const k = 1 + this.after.t * 0.6; this.after.sp.scale.set(this.after.s * k, this.after.s * 1.5 * k, 1);
       if (this.after.t > 0.7) { scene.remove(this.after.sp); this.after = null; } }
   },
   update(dt) {
-    if (G.state !== 'play' || COL.active) { if (this.disperse >= 0) this.updateDisperse(dt); return; }
+    this.fxDt = dt;
+    if (G.state !== 'play' || COL.active) { if (this.disperse >= 0) this.updateDisperse(dt); else this.show(null, 0, 0); return; }
     if (this.rush) return this.updateRush(dt);
     if (!this.active) { if (G.ascent === 1 && this.playerIdx() >= 48) this.spawn(48, 0.85); else { Audio.figLevel(0, G.t); return; } }
     const pIdx = this.playerIdx();
@@ -849,7 +929,7 @@ const FIG = {
     if (d < 8 && !this.said8) { this.said8 = true; G.speak(["It's right behind me.", "It's close. It's too close."], 2.4); }
     if (d < 3.5 && !this.said4) { this.said4 = true; G.speak(["No— no—", "Get away from me!"], 1.6, true); }
     // the rumble of it, swelling as it closes; a breath when it is close
-    Audio.figLevel(near * near * 0.9, G.t);
+    Audio.figLevel(near * near * 0.9, G.t, dt);
     this.breathT -= dt; if (d < 8 && this.breathT <= 0) { this.breathT = 2.2 + Math.random(); Audio.breath(clamp(1 - d / 8, 0.2, 1)); }
     // your head: when you stand still you become aware of it - you look down, roughly where the sound is, not at it.
     // when it comes into view your head snaps to it. Nothing tracks it through the floor.
@@ -881,31 +961,31 @@ const FIG = {
   updateGrab(dt, g, stumbleDir) {
     if (!g.from) {   // it starts 3.5 m away on the side opposite the drop, at eye height
       const sd = stumbleDir().clone(); g.dir = sd; g.from = new THREE.Vector3(P.pos.x - sd.x * 3.5, P.pos.y + EYE + 0.2, P.pos.z - sd.z * 3.5);
-      Audio.scream(); fovKick = -16; scareKick = 1;                                   // the world zooms in on it
+      Audio.creatureAttack(); fovKick = -10; scareKick = .4;                                   // the world zooms in on it
     }
     g.t += dt;
     const dx = g.from.x - P.pos.x, dy = g.from.y - (P.pos.y + EYE), dz = g.from.z - P.pos.z;
     const yawTo = Math.atan2(-dx, -dz), pitchTo = Math.atan2(dy, Math.hypot(dx, dz));
     let dyaw = yawTo - P.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); const k = 1 - Math.exp(-dt * 26);
     P.yaw += dyaw * k; P.pitch = lerp(P.pitch, pitchTo, k);
-    // 0 - 0.32 s: it closes the distance, accelerating, growing until it fills the view
-    const u = Math.pow(clamp(g.t / 0.32, 0, 1), 1.7);
+    // 0 - 0.44 s: it closes the distance, accelerating, growing until it fills the view
+    const u = Math.pow(clamp(g.t / 0.44, 0, 1), 1.7);
     const eye = tmp.set(P.pos.x, P.pos.y + EYE, P.pos.z), look = new THREE.Vector3(-Math.sin(P.yaw) * Math.cos(P.pitch), Math.sin(P.pitch), -Math.cos(P.yaw) * Math.cos(P.pitch));
     const end = eye.clone().addScaledVector(look, 0.42);
     const at = g.from.clone().lerp(end, u); at.x += (Math.random() - 0.5) * 0.05 * u; at.y += (Math.random() - 0.5) * 0.05 * u;
     const sc = lerp(0.35, 1.45, u); this.face.position.copy(at); this.face.scale.set(sc, sc * 1.5, 1); this.face.material.rotation = (Math.random() - 0.5) * 0.25 * u;
-    const strobe = u > 0.6 ? (Math.floor(g.t * 40) % 2 ? 1 : 0.7) : 1;                                   // it flickers as it hits
+    const strobe = 1;                                   // it flickers as it hits
     this.face.material.opacity = (g.t < 0.7 ? Math.min(1, g.t * 12) : Math.max(0, 1 - (g.t - 0.7) * 5)) * strobe;
-    if (g.t > 0.22 && !g.strobed) { g.strobed = true; const el = renderer.domElement; el.style.filter = 'invert(1)'; setTimeout(() => el.style.filter = '', 45); flash(0.7);
+    if (g.t > 0.38 && !g.strobed) { g.strobed = true; flash(.08);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.face.material.map, transparent: true, opacity: 0.35, depthWrite: false, depthTest: false, fog: false })); sp.renderOrder = 11;
       sp.position.copy(at); this.after = { sp, t: 0, s: sc }; scene.add(sp); }
     if (this.after && this.after.t < 0.7) { const eye2 = new THREE.Vector3(P.pos.x, P.pos.y + EYE, P.pos.z); const look2 = new THREE.Vector3(-Math.sin(P.yaw) * Math.cos(P.pitch), Math.sin(P.pitch), -Math.cos(P.yaw) * Math.cos(P.pitch)); this.after.sp.position.copy(eye2).addScaledVector(look2, 0.5); }
     const smokeAt = at.clone(); smokeAt.y -= 1.1; this.show(smokeAt, 1, 0, 0.75);
-    if (g.t > 0.3 && P.thrown === 'held') {
+    if (g.t > 0.44 && P.thrown === 'held') {
       P.thrown = 'air'; const dir = g.dir;
       P.pos.addScaledVector(dir, 0.5);                                               // the stumble back
       const h = g.roof ? 4.8 : 4.2; P.vel.set(dir.x * h, g.roof ? 5.8 : 2.6, dir.z * h); P.grounded = false;   // the roof stumble clears the parapet
-      P.fallStart = P.pos.y; P.pitch += 0.35; Audio.thud(); fovKick = 34; flash(0.4); shakeKick = 2;
+      P.fallStart = P.pos.y; P.pitch += 0.25; Audio.thud(); Audio.fallReaction(); P.whooshed = true; fovKick = 22; flash(.1); shakeKick = 1.2;
     }
     if (g.t > 0.9) { if (g.roof) { this.rush = null; this.active = false; } else this.grab = null; this.show(null, 0, 0); this.face.material.opacity = 0; }
   },
@@ -921,11 +1001,11 @@ const FIG = {
     const dx = r.from.x - P.pos.x, dz = r.from.z - P.pos.z, yawTo = Math.atan2(-dx, -dz);
     let dyaw = yawTo - P.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); const k = 1 - Math.exp(-dt * 5);
     P.yaw += dyaw * k; P.pitch = lerp(P.pitch, -0.15, k);
-    const u = Math.pow(clamp((r.t - 0.9) / 1.1, 0, 1), 1.6);   // it hangs at the hatch, then comes fast
+    const u = Math.pow(clamp((r.t - (G.ascent === 2 ? 1.45 : .9)) / (G.ascent === 2 ? .72 : 1.1), 0, 1), 1.6);   // it hangs at the hatch, then comes fast
     const toYou = tmp.set(P.pos.x - r.from.x, 0, P.pos.z - r.from.z), dist = toYou.length(); toYou.normalize();
     const at = r.from.clone().addScaledVector(toYou, Math.max(0, dist - 0.9) * u); at.y = TOWER_H;
     this.show(at, 1, 0, u * 0.6);
-    Audio.figLevel(0.3 + 0.7 * u, G.t);
+    Audio.figLevel(0.3 + 0.7 * u, G.t, dt);
     if (r.t > 0.5 && !r.said) { r.said = true; Audio.breath(0.8); G.speak(["What the—", "Oh no. No."], 1.8); }
     if (u >= 1) { r.grab = { t: 0, pos: at.clone(), roof: true }; P.thrown = 'held'; Audio.grab(); shakeKick = 1.2; fovKick = 20; }
   },
@@ -991,6 +1071,7 @@ const P = {
   grounded: false, groundRef: null, fallStart: 0, fov: 72, nerve: 1, stepAcc: 0, inside: false, onRoof: false,
   checkpoint: { x: SHOT.x, y: 0, z: SHOT.z, yaw: SHOT.yaw }, wind: new THREE.Vector3(), stumble: new THREE.Vector3(), stumbleT: 0, thrown: null,
   place(x, y, z, yaw, pitch) {   // teleport without carrying over a fall
+    this.fallVoice = false; this.whooshed = false;
     this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = pitch; this.roll = 0;
     this.grounded = false; this.groundRef = null; this.fallStart = y; this.wind.set(0, 0, 0); this.stumbleT = 0; this.thrown = null;
   },
@@ -1095,13 +1176,13 @@ const G = {
   lightsOut: 0, mastDone: false, gust: { t: 0, phase: 0, dir: new THREE.Vector3(), next: 14 }, roofSaid: false, doorSaid: false, heartT: 0,
   intro: null, cine: null, totalClimb: 0,
   say(text, dur = 4.5, note = false) { const m = $('msg'); m.textContent = text; m.className = note === 'speech' ? 'speech' : note ? 'note' : ''; m.style.opacity = 1; this.msgT = dur; },
-  // what you say out loud - never the same line twice in a row, never on top of itself
+  // Unvoiced internal thoughts - never the same line twice in a row, never on top of itself
   speak(lines, dur = 2.6, urgent = false) { if (!urgent && G.t - (this.spokeT || -9) < 3.2) return false; const pool = lines.filter(l => l !== this.lastLine); const l = pool[Math.floor(Math.random() * pool.length)];
     this.lastLine = l; this.spokeT = G.t; this.say(l, dur, 'speech'); return true; },
   hint(text) { const h = $('hint'); h.textContent = IS_TOUCH && text ? text.replace(/^E — /, '') : text; h.style.opacity = text ? 1 : 0; $('buse').classList.toggle('live', !!text); },
   fade(v) { $('fade').style.opacity = v; },
   setupAscent(n) {
-    this.ascent = n;
+    this.ascent = n; Audio.stopVoice();
     const pat = buildPattern(n);
     SL.forEach((s, i) => { const st = slabState[i]; st.gone = pat.gap[i]; st.fallY = st.gone ? -1e6 : 0; st.crumble = pat.crumble[i]; st.timer = 0; st.shake = 0; st.respawn = 0; placeSlab(i);
       slabMesh.setColorAt(i, st.crumble ? C_CRUMBLE : (s.landing ? C_LANDING : C_STONE)); });
@@ -1157,13 +1238,15 @@ const G = {
     else { this.cine = { t: 0, kind: 'rush' }; FIG.startRush(); }
   },
   setLights() { const cols = [0xfff6dc, 0xa89f8f, 0x4a4540, 0x0a0a0a]; MATS.lamps.color.set(cols[this.lightsOut]);
+    mastBulbs.forEach((bulb,k) => bulb.material.color.set(k < 3-this.lightsOut ? 0xfff6dc : 0x15171a));
+    mastLight.intensity = .6 * (3-this.lightsOut)/3;
     mastHalos.forEach((h, k) => h.material.opacity = k < 3 - this.lightsOut ? 0.75 : 0);
     [...$('lights').children].forEach((el, k) => el.classList.toggle('done', k < this.lightsOut)); },
   skipToEnd() {   // debug: straight to the roof of the last ascent, next to the lights
     this.setupAscent(3); this.intro = null; this.lookEnabled = true; this.roofSaid = true; this.doorSaid = true;
     const [mx, my] = LAYOUT.mast; P.place(mx - 1.8, TOWER_H, -my - 0.5, Math.PI * 0.75, -0.1); P.roll = 0; P.nerve = 0.9;
     P.checkpoint = { x: ROOF_SAFE.x, y: TOWER_H, z: ROOF_SAFE.z, yaw: 0 };
-    this.say(IS_TOUCH ? "Skipped to the roof. Put them out: use, three times." : "Skipped to the roof. Put them out: E, three times.", 4);
+    this.say(IS_TOUCH ? "Last light. Tap USE." : "Last light. Press E.", 4);
   },
   nearMast() { const [mx, my] = LAYOUT.mast; return P.pos.y > TOWER_H - 1 && Math.hypot(P.pos.x - mx, P.pos.z + my) < 2.4; },
   nextAscent() { this.setupAscent(this.ascent + 1); SAVE.write(); this.fade(1); setTimeout(() => { this.fade(0); this.intro.t = 0.001; this.state = 'play'; }, 1400); },
@@ -1186,6 +1269,9 @@ const COL = {
   update(dt) {
     if (!this.active) return;
     this.t += dt; const t = this.t;
+    // Small concrete flakes precede the structural failures; shadows follow the moving tower.
+    if (t > 4 && t < 11 && Math.floor(t*2) !== this.gritBeat) { this.gritBeat = Math.floor(t*2); this.burst(NSEG-1, TOWER_H-.2, TOWER_H+.5, 2); }
+    this.shadowT = (this.shadowT || 0) - dt; if (this.shadowT <= 0) { this.shadowT = IS_TOUCH ? .3 : .15; renderer.shadowMap.needsUpdate = true; }
     // 1. sway: up to ~6 m of travel at the roof, and the drone climbs with it
     const amp = 0.08 * smooth(clamp(t / 12, 0, 1));
     let sway = amp * Math.sin(t * 0.95);
@@ -1215,7 +1301,7 @@ const COL = {
       c.needsUpdate = true; }
     // 3. a beat of nothing, then the topple
     if (this.phase === 'sway' && this.broken === this.breakAt.length && t > this.breakAt[this.breakAt.length - 1] + 2.2) { this.phase = 'still'; this.stillT = t; Audio.hush(1.6); Audio.drone(0, 55); }
-    if (this.phase === 'still') { sway *= Math.max(0, 1 - (t - this.stillT) * 3); if (t > this.stillT + 1.8) { this.phase = 'topple'; this.tiltV = 0.05; Audio.rumbleLevel(0.9); Audio.scream(true); flash(0.15); } }
+    if (this.phase === 'still') { sway *= Math.max(0, 1 - (t - this.stillT) * 3); if (t > this.stillT + 1.8) { this.phase = 'topple'; this.tiltV = 0.05; Audio.rumbleLevel(0.9); Audio.windScream(true); flash(0.15); } }
     if (this.phase === 'topple') {
       // pieces of the parapet come away past your face; your eyes are dragged toward the ground
       this.debrisT -= dt; if (this.debrisT <= 0 && this.attached) { this.debrisT = 0.12; this.burst(NSEG - 1, SEGZ[NSEG] - 1.2, SEGZ[NSEG] + 0.6, 3); }
@@ -1223,7 +1309,7 @@ const COL = {
       this.tiltV += (0.05 + 0.42 * Math.sin(Math.min(this.tilt, 1.5))) * dt;
       this.tilt = Math.min(this.tilt + this.tiltV * dt, 1.5);
       if (this.tilt > 0.6) this.topBreak = Math.min(this.topBreak + this.tiltV * 0.8 * dt, 0.8);   // the top snaps off like a chimney
-      if (this.tilt >= 1.5 && this.impactT < 0) { this.impactT = t; Audio.impact(); shakeKick = 2; this.dust(0, 40, 26); Audio.rumbleLevel(0.2); Audio.scream(false); }
+      if (this.tilt >= 1.5 && this.impactT < 0) { this.impactT = t; Audio.impact(); shakeKick = 2; this.dust(0, 40, 26); Audio.rumbleLevel(0.2); Audio.windScream(false); }
       sway = 0;
     }
     this.lean = lerp(this.lean, this.broken * 0.025, dt * 0.7);
@@ -1246,12 +1332,12 @@ const COL = {
         this.attached = false; P.pos.copy(feet);
         const h = Math.hypot(rideV.x, rideV.z); if (h > 7) { rideV.x *= 7 / h; rideV.z *= 7 / h; }
         P.vel.set(rideV.x + P.vel.x * 0.5, Math.max(rideV.y, -3) + (offTop ? P.vel.y : 1.5), rideV.z + P.vel.z * 0.5);
-        if (!offTop) Audio.step(true);
+        if (!offTop) Audio.step(true); Audio.fallReaction(.6);
       }
     } else if (!this.ended) {
       P.vel.y -= 12 * dt; P.pos.addScaledVector(P.vel, dt); P.roll += 2.6 * dt; P.pitch = clamp(P.pitch - 0.9 * dt, -1.5, 1.5);
-      if (P.pos.y < 1.0 && !this.ended) { this.ended = true; flash(0.6); $('fade').style.transition = 'opacity 1.2s ease'; G.fade(1); Audio.impact(); Audio.rumbleLevel(0); Audio.scream(false); Audio.drone(0, 55); Audio.fadeOut(3.0);
-        setTimeout(() => { G.state = 'end'; document.exitPointerLock(); for (const id of ['reticle', 'alt', 'nerve', 'nervelbl']) $(id).classList.add('hidden'); $('msg').style.opacity = 0; $('end').style.display = 'flex';
+      if (P.pos.y < 1.0 && !this.ended) { this.ended = true; flash(0.6); $('fade').style.transition = 'opacity 1.2s ease'; G.fade(1); Audio.impact(); Audio.rumbleLevel(0); Audio.windScream(false); Audio.drone(0, 55); Audio.fadeOut(3.0);
+        setTimeout(() => { G.state = 'end'; document.exitPointerLock(); for (const id of ['reticle', 'alt', 'nerve', 'nervelbl', 'lights']) $(id).classList.add('hidden'); $('msg').style.opacity = 0; $('end').style.display = 'flex';
           const secs = Math.round((performance.now() - G.startTime) / 1000);
           $('endstat').textContent = `${Math.round(G.totalClimb)} m climbed · ${G.falls} fall${G.falls === 1 ? '' : 's'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; }, 3200); }
     }
@@ -1275,12 +1361,12 @@ const COL = {
   },
   burst(k, z0, z1, n) {
     for (let j = 0; j < n; j++) {
-      const idx = this.pieces.length % 420; const side = Math.floor(Math.random() * 4);
+      const idx = this.pieceCursor || 0; this.pieceCursor = (idx + 1) % 420; const side = Math.floor(Math.random() * 4);
       const along = (Math.random() - 0.5) * 2 * B, y = z0 + Math.random() * (z1 - z0);
       const p = side === 0 ? new THREE.Vector3(along, y, B) : side === 1 ? new THREE.Vector3(B, y, along) : side === 2 ? new THREE.Vector3(along, y, -B) : new THREE.Vector3(-B, y, along);
       const nrm = side === 0 ? new THREE.Vector3(0, 0, 1) : side === 1 ? new THREE.Vector3(1, 0, 0) : side === 2 ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(-1, 0, 0);
       p.applyMatrix4(segXform[k]);
-      const size = 0.3 + Math.random() * 0.8;
+      const size = this.t < 11 ? .025 + Math.random()*.09 : .12 + Math.random()*.65;
       this.pieces[idx] = { p, v: nrm.multiplyScalar(2 + Math.random() * 6).add(new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random() * 4, (Math.random() - 0.5) * 3)), r: new THREE.Vector3(Math.random() * 3, Math.random() * 3, 0), w: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3), size, idx, rest: false };
       if (this.pieces.length < 420) this.pieces.length = Math.max(this.pieces.length, idx + 1);
     }
@@ -1362,10 +1448,10 @@ function updatePlayer(dt) {
       if (P.thrown === 'air') { P.thrown = null; P.roll = 0; FIG.grab = null; FIG.spawn(24, FIG.speed); G.say("It missed. It won't next time.", 3.5); }
       if (fell > 1.2) Audio.step(true);
     }
-    P.pos.y = g.y; P.vel.y = 0; P.grounded = true; P.groundRef = g.ref;
+    P.pos.y = g.y; P.vel.y = 0; P.grounded = true; P.groundRef = g.ref; P.fallVoice = false;
   } else {
-    if (wasGrounded) { P.fallStart = P.pos.y; P.whooshed = false; }
-    if (!P.whooshed && P.vel.y < -7) { P.whooshed = true; Audio.whoosh(); }
+    if (wasGrounded) { P.fallStart = P.pos.y; P.whooshed = false; P.fallVoice = false; }
+    if (!P.whooshed && P.vel.y < -7) { P.whooshed = true; Audio.whoosh(); Audio.fallReaction(); }
     P.grounded = false; P.groundRef = null;
   }
   // footsteps
@@ -1422,7 +1508,7 @@ function updateVertigo(dt) {
   if (P.nerve <= 0 && P.stumbleT <= 0 && P.grounded && G.state === 'play' && !COL.active) {
     // knees go. a small push, in a random direction — usually towards the void, because that is where you were looking
     const a = P.yaw + Math.PI + (Math.random() - 0.5) * 1.2;
-    P.stumble.set(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(1.6); P.stumbleT = 0.45; P.nerve = 0.3; Audio.thud();
+    P.stumble.set(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(1.6); P.stumbleT = 0.45; P.nerve = 0.3; Audio.thud(); Audio.voice('voice_gasp', .55);
     G.say("Breathe. Look at the wall.", 3.5);
   }
 
@@ -1469,7 +1555,7 @@ function updateNarrative(dt) {
       if (c.t > 1.4 && !c.said) { c.said = true; G.say("Behind you.", 2); }
     } else if (c.kind === 'collapse') {
       if (c.t > 1.0 && !c.said) { c.said = true; G.say("There.", 2.5); }
-      if (c.t > 5.5 && !c.said2) { c.said2 = true; G.say("It was the lights holding it up.", 4); }
+      if (c.t > 5.5 && !c.said2) { c.said2 = true; G.say("The floor moved.", 4); }
       if (c.t > 12.8 && !c.said3) { c.said3 = true; G.say("Don't stand still.", 3); }
       if (COL.phase === 'still' && !c.said4) { c.said4 = true; G.say("…", 1.5); }
       if (COL.phase === 'topple' && !c.said5) { c.said5 = true; G.say("Hold on to nothing.", 3); }
@@ -1481,7 +1567,7 @@ function updateCamera(dt) {
   // fov: dolly-zoom outward as the vertigo takes hold; wide when falling
   const falling = !P.grounded && P.vel.y < -6 ? clamp((-P.vel.y - 6) / 20, 0, 1) : 0;
   fovKick = fovKick > 0 ? Math.max(0, fovKick - dt * 30) : Math.min(0, fovKick + dt * 30);
-  const targetFov = Math.min(128, 72 + 30 * vertigoS + 22 * falling + (COL.active ? 10 : 0) + (COL.phase === 'topple' ? 18 : 0) + fovKick);
+  const targetFov = Math.min(108, 72 + 30 * vertigoS + 22 * falling + (COL.active ? 10 : 0) + (COL.phase === 'topple' ? 18 : 0) + fovKick);
   P.fov = lerp(P.fov, targetFov, 1 - Math.exp(-dt * (fovKick !== 0 ? 12 : 2.5)));
   camera.fov = P.fov; camera.updateProjectionMatrix();
   // sway: worse with low nerve and high vertigo
@@ -1503,6 +1589,7 @@ function updateCamera(dt) {
 }
 
 function updateLights() {
+  if (COL.active) { lampPool.forEach(l => l.intensity = 0); return; }
   // ascent 2: the lamps flicker and gutter; ascent 3: they go out behind you, a lap and a bit below
   if (G.ascent === 2) for (let i = 0; i < lampSpots.length; i++) { const l = lampSpots[i]; if (!l.on) continue;
     const gutter = Math.sin(G.t * 0.7 + i * 2.13) > 0.975 ? 0.12 : 1;
@@ -1515,13 +1602,13 @@ function updateLights() {
 }
 
 function updateHud() {
-  const alt = (COL.active && COL.attached ? camera.position.y - EYE : P.pos.y) + (G.ascent - 1) * TOWER_H;
+  const alt = (COL.active && COL.attached ? camera.position.y - EYE : P.pos.y);
   $('alt').firstElementChild.textContent = Math.max(0, Math.round(alt));
   const lap = P.groundRef?.slab !== undefined ? SL[P.groundRef.slab].lap + 1 : (P.onRoof ? 'roof' : '');
   $('lap').textContent = COL.active ? (COL.attached ? 'roof' : '') : lap ? (P.onRoof ? 'roof' : `lap ${lap} / ${Math.ceil(SL.length / 16)}`) : (G.ascent > 1 ? `ascent ${G.ascent}` : '');
   const bar = $('nerve').firstElementChild; bar.style.transform = `scaleX(${P.nerve})`; bar.style.background = P.nerve < 0.35 ? '#e0563c' : '#f2c777';
   vigPulse = Math.max(0, vigPulse - 0.08);
-  $('vig').style.opacity = clamp((1 - P.nerve) * 0.9 + vertigoS * 0.35 + vigPulse * 0.3, 0, 1);
+  $('vig').style.opacity = clamp((1 - P.nerve) * .55 + vertigoS * .2 + vigPulse * .15, 0, COL.active ? .45 : .75);
 }
 
 function tick() {
@@ -1529,7 +1616,7 @@ function tick() {
   if (innerWidth && innerHeight && (innerWidth !== sizedW || innerHeight !== sizedH)) fitCanvas();
   const now = performance.now(); let dt = window.__dt || Math.min(0.05, (now - lastTime) / 1000); lastTime = now; G.t += dt;
   // clouds always move; from the base, that is what makes the tower fall on you
-  for (const c of clouds) { c.position.x += c.userData.v * dt * 0.9; c.position.z += c.userData.v * dt * 0.42; if (c.position.x > 380) c.position.x = -380; if (c.position.z > 380) c.position.z = -380; }
+  sky.material.uniforms.time.value = G.t;
   if (IS_TOUCH && G.lookEnabled && G.state === 'play' && (lookRate.x || lookRate.y)) { FIG.lastLookT = G.t; const cx = lookRate.x * Math.abs(lookRate.x), cy = lookRate.y * Math.abs(lookRate.y);
     P.yaw -= cx * 3.0 * dt; P.pitch = clamp(P.pitch + cy * 1.9 * dt, -1.55, 1.55); }
   if (noLock && !IS_TOUCH && G.lookEnabled && G.state === 'play' && !G.cine) { P.yaw -= edgeX * 1.1 * dt; P.pitch = clamp(P.pitch - edgeY * 0.7 * dt, -1.55, 1.55); }
@@ -1539,7 +1626,8 @@ function tick() {
     if (G.state === 'play' && !COL.active) updatePlayer(dt);
     if (G.state === 'play' && COL.active) COL.update(dt);
     if (G.state === 'play') { if (P.pos.y > prevY && P.grounded) G.totalClimb += P.pos.y - prevY; }
-    if (!COL.active) { updateSlabs(dt); updateGusts(dt); FIG.update(dt); }
+    if (!COL.active) { updateSlabs(dt); updateGusts(dt); }
+    FIG.update(dt);
     updateVertigo(dt); updateNarrative(dt);
   }
   updateCamera(dt); updateLights(); updateHud();
@@ -1563,16 +1651,20 @@ function tick() {
   if (gradePass) { const u = gradePass.uniforms, falling = (!P.grounded && P.vel.y < -6) || (COL.active && !COL.attached) ? clamp(-P.vel.y / 20, 0, 1) : 0;
     scareKick = Math.max(0, scareKick - dt * 1.4);
     const held = P.thrown === 'held' ? 1 : 0;   // while it is in your face the image stays sharp; the smear and the fringing come with the fall
-    u.time.value = G.t; u.aberr.value = held ? 0.006 : 0.0012 + 0.012 * Math.max(vertigoS, panicLevel * 0.7, Math.abs(fovKick) / 34, falling) + 0.05 * scareKick;
-    u.smear.value = held ? 0 : 0.65 * falling + (COL.phase === 'topple' && COL.active ? 0.35 : 0) + Math.abs(fovKick) / 34 * 0.6 + 0.18 * scareKick;
+    u.time.value = G.t; u.aberr.value = held ? 0.006 : 0.0005 + 0.007 * Math.max(vertigoS, panicLevel * 0.7, Math.abs(fovKick) / 34, falling) + 0.012 * scareKick;
+    u.smear.value = held ? 0 : 0.28 * falling + (COL.phase === 'topple' && COL.active ? 0.15 : 0) + Math.abs(fovKick) / 34 * 0.25 + 0.18 * scareKick;
     const onYou = (FIG.grab || (FIG.rush && FIG.rush.grab)) ? 1 : 0;
-    u.grain.value = (0.04 + 0.08 * panicLevel) * (1 - onYou * 0.6); u.vig.value = (0.5 + 0.2 * panicLevel) * (1 - onYou * 0.5); u.pulse.value = vigPulse; }
+    u.grain.value = (0.025 + 0.04 * panicLevel) * (1 - onYou * 0.6); u.vig.value = (0.35 + 0.15 * panicLevel) * (1 - onYou * 0.5); u.pulse.value = vigPulse; }
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
 // ---------------------------------------------------------------- go
+let faceTexture = null;
+const faceReady = new Promise(resolve => new THREE.TextureLoader().load('data:image/png;base64,' + FACE_B64, tex => {
+  tex.encoding = THREE.sRGBEncoding; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; faceTexture = tex; resolve();
+}, undefined, () => { console.warn('Using procedural figure face'); resolve(); }));
 const audioReady = Audio.preload((done, n) => { $('clickgo').textContent = `loading sounds ${done} / ${n}`; });
-Promise.all([loadTower(), audioReady]).then(() => {
+Promise.all([loadTower(), audioReady, faceReady]).then(() => {
   COL.initFx(); FIG.init();
   G.setupAscent(1);
   renderer.shadowMap.needsUpdate = true;
