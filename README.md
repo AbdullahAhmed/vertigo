@@ -2,7 +2,8 @@
 
 First-person, low-poly, browser-only. You wake at the foot of a sodium-lit concrete
 tower, looking straight up it (the opening shot is the photo). Find the door, climb the
-railing-less spiral inside, reach the three lights on the roof. Then do it again.
+railing-less spiral inside, and reach the roof. Press **Extinguish light** to switch off all three
+roof lights and ride the tower collapse. One climb, one ending.
 
 **Play:** serve `vertigo.html` together with the `sfx/` folder (needs internet for three.js from a CDN),
 or use the published artifact link. Opened straight from disk it still runs, with synthesised sound. Headphones recommended.
@@ -20,10 +21,9 @@ or open it in its own tab.
   Landings every lap are checkpoints (with a sodium lamp and, sometimes, a note).
 - **Vertigo** — looking down over a drop widens the FOV (dolly-zoom), drains *nerve*, adds
   sway and a vignette, then a heartbeat. At zero nerve your knees go. Look at the wall to recover.
-- **Three ascents** — 1: gaps from lap 2, crumbling slabs from lap 5. 2: wind gusts that
-  push you toward the void, more gaps. 3: half the lamps are dead, crumble-then-gap combos,
-  and at the top you put the lights out one by one.
-- **The collapse** — with the last light out the tower sways, the city grid blinks out in rings from
+- **One climb** — gaps from lap 2 on desktop, crumbling slabs from lap 5, and the figure behind you.
+  Phones keep their more forgiving controls and difficulty. Reach the roof once to trigger the ending.
+- **The collapse** — with all three roof lights out the tower sways, the city grid blinks out in rings from
   the tower outward until the last ring dies just before the topple, and the tower gives from the bottom:
   each 12 m segment pancakes and the stack you're standing on drops with it, then what's
   left topples with you on the roof until it's past saving. The tower ships from Blender in
@@ -31,25 +31,26 @@ or open it in its own tab.
 - **The figure** — from lap 3 a column of dark smoke climbs behind you, at about half your walking
   pace, and it never stops; a deep pulsing rumble swells as it closes. Stand still and your head is
   drawn to look for it; let it reach you and a face comes out of the smoke, straight at you, and you
-  stumble backwards into the shaft. Ascent 3: faster. Panic (breath, blood in the ears, heart) rises
+  stumble backwards into the shaft. Panic (breath, blood in the ears, heart) rises
   with nerve loss, the drop in view, and the thing in view.
-- **The lights** — one per ascent. Put one out and your controls drop: you turn to the hatch, the
-  smoke comes across the roof at you, the face, and you go backwards over the parapet. The next
-  ascent wakes higher. The third light starts the collapse.
-- **Each ascent wakes higher** (base / lap 4 / lap 7) with its own opening shot (up the outside /
-  down the shaft / up the shaft). Ascent 2: haze and guttering lamps. Ascent 3: lamps die behind you.
-- **Save & continue** — progress (ascent, last landing, stats) is kept in the browser; the title
-  offers *continue* or *start over*. Three lights in the HUD show the ascents done.
+- **The lights** — three evenly spaced lamps across the front roof edge, at one height, matching
+  the reference photo. The opening uses the photo's flat-face, steep upward, rolled composition;
+  it gently levels out and widens before you take control.
+- **Roof button** — **Extinguish light** appears once you stand on the roof. Tap it, press E/USE,
+  or click with the mouse captured to extinguish all three lights and start the collapse immediately.
+  There are no forced roof throws or repeat ascents.
+- **Save & continue** — last landing and stats are kept in the browser. Old second/third-ascent
+  saves keep their checkpoint height and continue within the single climb, with all roof lights on.
 - **Phones:** dual fixed pads with a 14% radial dead zone and continuous slow movement, JUMP / USE buttons,
   no jump puzzles or extra crumble penalty, and 1.5-second crumble timing. Wind and nerve-stumble
   displacement are halved; the visual/audio warnings remain. The figure pursues more gently and pauses
   for 6 seconds after respawn. After 3 / 5 deaths at one landing, pursuit eases another 15% / 30% and
   recovery lasts 8 / 10 seconds. This session-only assistance resets at a different landing or ascent.
-  Roof encounters and the ending retain their original timing. Desktop tuning is unchanged.
+  The collapse retains its original timing. Desktop movement and first-climb difficulty are unchanged.
   Assisted edge-jumps remain a safety net; fullscreen is top-right, triple-tap top-left = the F8 skip.
-- **Debug:** `F8` (or `Shift+End`) during play skips to the roof of ascent 3 beside the lights.
+- **Debug:** `F8` (or `Shift+End`) during play skips to the roof, ready to extinguish the lights.
 - **Falls** over 5.5 m send you back to the last landing. The HUD shows actual height;
-  the ending separately reports total distance climbed across ascents.
+  the ending separately reports total distance climbed, including retries.
 - **Sound:** recorded CC0 samples in `sfx/` (wind outside and in the shaft, lamp hum, concrete footsteps,
   heartbeats, stone cracks and debris, building collapse, distant booms, a falling whoosh and a switch).
   All protagonist vocals are female recordings from tcrocker68's May 2014 collection, at original pitch.

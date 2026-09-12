@@ -168,17 +168,14 @@ def parapet_build(bm):
     ring(bm, B - 0.4, B, H, H + PARAPET)
 mesh_obj("parapet", parapet_build, stone2)
 
-# --- roof mast with the three lights, hanging just outside the SE corner (like the photo)
-MAST = (B - 0.3, -B + 0.3)
-LX, LY = B + 1.5, -B - 1.1          # the lights hang out past the corner, clear of the cornice, so they read from the ground
-LAMPS = [(LX, LY, H + 3.2), (LX, LY, H + 4.4), (LX, LY, H + 5.6)]
+# --- three lights across the front roof edge; their row appears vertical in the rolled photo
+MAST = (0.2, -B + 0.5)
+LAMPS = [(x, -B - 0.7, H + 3.0) for x in (-1.6, 0.2, 2.0)]
 def mast_build(bm):
-    mx, my = MAST
-    box_bm(bm, mx - 0.12, mx + 0.12, my - 0.12, my + 0.12, H, H + 6.4)
-    # arm reaching out over the corner: out along x, then along y, then a drop rod
-    box_bm(bm, mx, LX + 0.06, my - 0.06, my + 0.06, H + 6.2, H + 6.32)
-    box_bm(bm, LX - 0.06, LX + 0.06, LY - 0.06, my, H + 6.2, H + 6.32)
-    box_bm(bm, LX - 0.06, LX + 0.06, LY - 0.06, LY + 0.06, H + 2.8, H + 6.32)
+    for x, y, z in LAMPS:
+        my = MAST[1]
+        box_bm(bm, x - 0.045, x + 0.045, my - 0.045, my + 0.045, H, z)
+        box_bm(bm, x - 0.045, x + 0.045, y, my, z - 0.045, z + 0.045)
 mesh_obj("mast", mast_build, metal)
 
 def lamps_build(bm):
@@ -283,12 +280,13 @@ print(f"[VERTIGO] objects={len(bpy.data.objects)} triangles~{tris}")
 
 # ---------------------------------------------------------------- preview render from the base, looking up (the opening shot)
 scene = bpy.context.scene
-cam_data = bpy.data.cameras.new("cam"); cam_data.lens = 18
+cam_data = bpy.data.cameras.new("cam"); cam_data.sensor_fit = 'VERTICAL'; cam_data.angle = math.radians(37.27853)
 cam = bpy.data.objects.new("cam", cam_data); scene.collection.objects.link(cam)
-cam.location = (2.5, -B - 3.0, 1.6)
-look = Vector((1.0, -B, 58.0)) - Vector(cam.location)
+cam.location = (-1.31087, -B - 8.78625, 1.6)
+pitch, yaw = 1.42126, -0.18735
+look = Vector((-math.sin(yaw) * math.cos(pitch), math.cos(yaw) * math.cos(pitch), math.sin(pitch)))
 q = look.to_track_quat('-Z', 'Y')
-cam.rotation_euler = (q @ Quaternion((0, 0, 1), math.radians(12))).to_euler()
+cam.rotation_euler = (q @ Quaternion((0, 0, 1), 1.38800)).to_euler()
 scene.camera = cam
 sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", 'SUN')); scene.collection.objects.link(sun)
 sun.rotation_euler = (math.radians(60), 0, math.radians(30))

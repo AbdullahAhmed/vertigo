@@ -22,9 +22,9 @@ panel = '''<style>
 #reviewTools button{font:11px monospace;padding:5px;margin:2px}#reviewStats{white-space:pre-wrap;margin:4px 0}
 </style><div id="reviewTools">
 <button data-review="opening">Opening</button><button data-review="door">Door</button>
-<button data-review="stairs">Stairs A1</button><button data-review="ascent2">Stairs A2</button><button data-review="ascent3">Stairs A3</button>
+<button data-review="stairs">Stairs</button>
 <button data-review="figure">Figure</button><button data-review="face">Face</button>
-<button data-review="roof">Roof A1</button><button data-review="rush">Roof rush</button>
+<button data-review="roof">Roof</button>
 <button data-review="collapse">Collapse</button>
 <button data-review="one">+1s</button><button data-review="ten">+10s</button><button data-review="run">Run</button><button data-review="pause">Freeze</button>
 <button data-review="checks">Run checks</button><pre id="checks"></pre><pre id="reviewStats">Loading review</pre></div>
@@ -36,7 +36,7 @@ function reviewAdvance(seconds){window.reviewPaused=true; window.__dt=1/60; cons
 function reviewReset(n){
   COL.active=false;COL.phase='sway';COL.t=0;COL.ended=false;COL.attached=true;COL.broken=0;COL.said={};COL.impactT=-1;COL.gridStreet=false;COL.tilt=0;COL.tiltV=0;COL.topBreak=0;COL.lean=0;
   segGroups.forEach((g,k)=>{g.quaternion.identity();g.position.y=k?SEGZ[k]-SEGZ[k-1]:0;for(const c of g.children)if(c.isMesh)c.scale.y=1});updateSegXforms();
-  for(const st of slabState)st.loose=null;
+  for(const st of slabState)st.loose=null;renderer.shadowMap.needsUpdate=true;
   G.cine=null;G.intro=null;G.msgT=0;G.lastNote=-1;G.falls=0;G.totalClimb=0;G.setupAscent(n);G.intro=null;G.lookEnabled=true;G.state='play';G.roofSaid=true;G.doorSaid=true;
   if(FIG.after){scene.remove(FIG.after.sp);FIG.after=null}FIG.reset();for(const p of FIG.parts){p.life=0;p.sp.visible=false}
   for(const s of COL.dusts)scene.remove(s);COL.dusts=[];COL.pieces=[];COL.pieceCursor=0;for(let i=0;i<420;i++)COL.debris.setMatrixAt(i,new THREE.Matrix4().makeScale(0,0,0));COL.debris.instanceMatrix.needsUpdate=true;
@@ -53,12 +53,12 @@ function reviewScene(name){
   window.reviewPaused=true;$('checks').textContent='';
   if(!Audio.master){Audio.init();Audio.ctx.resume()}Audio.master.gain.value=0;
   reviewReset(name==='ascent2'||name==='rush2'?2:name==='ascent3'||name==='collapse'?3:1);
-  if(name==='opening'){P.place(SHOT.x,0,SHOT.z,SHOT.yaw,SHOT.pitch);P.roll=SHOT.roll}
+  if(name==='opening'){P.place(SHOT.x,0,SHOT.z,SHOT.yaw,SHOT.pitch);P.roll=SHOT.roll;P.fov=SHOT.fov;G.state='title'}
   if(name==='door'){P.place(0,0,B+5,0,0.1)}
   if(['stairs','ascent2','ascent3'].includes(name)){reviewPlaceSlab(name==='ascent3'?128:80,-0.7)}
   if(name==='figure'){reviewPlaceSlab(80,-0.85);FIG.spawn(11,0.85)}
   if(name==='face'){reviewPlaceSlab(80,0);FIG.spawn(1,0.85);FIG.grab={t:0,pos:FIG.posAt(79,new THREE.Vector3())};P.thrown='held'}
-  if(['roof','rush','rush2','collapse'].includes(name)){const[mx,my]=LAYOUT.mast;P.place(mx-1.8,TOWER_H,-my-0.5,Math.PI*0.75,-0.1);P.grounded=true;P.onRoof=true;P.inside=false;}
+  if(['roof','rush','rush2','collapse'].includes(name)){P.place(ROOF_SAFE.x,TOWER_H,ROOF_SAFE.z,0,-0.1);P.grounded=true;P.onRoof=true;P.inside=false;}
   if(name==='rush'||name==='rush2'||name==='collapse')G.use();
   reviewAdvance(name==='face'?0.22:name==='figure'?0.6:0.1);
 }
@@ -69,7 +69,7 @@ function runChecks(){
   check('no old human/monster vocal samples loaded',['scream','scream2','breath','breath2','growl','growl2','bodyfall','bodyfall2'].every(k=>!Audio.samples?.[k]));
   check('original face decoded',faceTexture.image.width===1024);
   reviewScene('ascent3');check('altitude is actual tower height',+$('alt').firstElementChild.textContent<73);
-  check('one physical bulb remains',mastBulbs.filter(b=>b.material.color.getHex()===0xfff6dc).length===1);
+  check('three roof bulbs start lit',mastBulbs.filter(b=>b.material.color.getHex()===0xfff6dc).length===3);
   check('mobile has no gaps',!IS_TOUCH||[1,2,3].every(n=>buildPattern(n).gap.every(v=>!v)));
   reviewScene('stairs');P.place(B+10,0,B+10,0,0);P.grounded=true;P.wind.set(2,0,0);P.stumble.set(2,0,0);P.stumbleT=1;
   const startX=P.pos.x;updatePlayer(.01);check('platform wind and stumble displacement',Math.abs(P.pos.x-startX-(IS_TOUCH?.02:.04))<.00001);
@@ -85,8 +85,14 @@ function runChecks(){
   Audio.voice('voice_breath');const breath=Audio.voiceSource;check('pain interrupts breathing',Audio.voice('voice_pain',.5,true)&&Audio.voiceSource!==breath);
   check('breathing cannot overlap pain',!Audio.voice('voice_breath'));Audio.stopVoice();
   reviewScene('ascent2');SAVE.write();const savedY=P.checkpoint.y;G.setupAscent(1);SAVE.load();SAVE.restore();
-  check('save restores ascent and checkpoint',G.ascent===2&&Math.abs(P.pos.y-savedY-.02)<.001);
-  for(const encounter of ['rush','rush2']){reviewScene(encounter);reviewAdvance(3.4);check(encounter+' throws the player',P.thrown==='air'&&!P.grounded);}
+  check('save restores single climb checkpoint',G.ascent===1&&Math.abs(P.pos.y-savedY-.02)<.001);
+  SAVE.write();SAVE.load();SAVE.data.ascent=3;SAVE.restore();check('legacy third-ascent save keeps height in one climb',G.ascent===1&&Math.abs(P.pos.y-savedY-.02)<.001&&G.lightsOut===0);
+  reviewScene('stairs');G.use();check('cannot extinguish from stairs',!COL.active);
+  reviewScene('roof');check('roof action is visible',!$('extinguish').hidden);$('extinguish').click();
+  check('one roof button click extinguishes all three and starts collapse',COL.active&&G.cine.kind==='collapse'&&G.lightsOut===3&&mastHalos.every(h=>h.material.opacity===0));
+  COL.t=2;G.use();check('repeated activation cannot restart collapse',COL.t===2&&$('extinguish').hidden);
+  check('no second climb is scheduled',!G.nextAscent&&G.ascent===1);
+  check('photo lamps form one evenly spaced row',LAYOUT.lamps.every(l=>l[2]===LAYOUT.lamps[0][2])&&Math.abs(LAYOUT.lamps[1][0]-LAYOUT.lamps[0][0]-1.8)<.001);
   reviewScene('collapse');reviewAdvance(5);check('figure disperses during collapse',FIG.disperse===-1&&FIG.parts.every(p=>!p.sp.visible));
   check('collapse lamps stay off',lampPool.every(l=>l.intensity===0));
   COL.burst(0,0,1,430);check('debris pool wraps without replacing only index zero',new Set(COL.pieces.map(p=>p.idx)).size===420&&COL.pieceCursor!==0);

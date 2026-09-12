@@ -26,3 +26,8 @@ The opening, stairs, face reveal and mid-collapse roof were inspected visually. 
 The mobile assistance pass passed all 23 mobile-mode and 22 desktop browser checks, plus build,
 audio and mobile-assistance Node checks. This covers the new tuning and the existing save, roof
 encounters and collapse. A physical-phone completion playthrough remains unverified.
+
+The single-climb release replaces the two roof-throw checks with roof-button, single-activation,
+legacy-save migration and lamp-row checks: 27 desktop / 28 mobile-mode checks passed. The actual
+mobile roof button was clicked and the collapse advanced successfully. The opening composition was
+compared with the portrait reference, and the button was inspected at a 390 × 844 phone viewport.
