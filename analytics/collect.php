@@ -30,6 +30,8 @@ try {
     locked_update($dir.'/'.$id.'.json',function($old)use($d,$metrics,$visitor){
         if (!$old) $old=['created'=>time(),'last_seen'=>time(),'visitor'=>$visitor,'platform'=>$d['platform'],'test'=>false,'seq'=>0,'metrics'=>array_fill_keys(metric_names(),0),'falls_by_lap'=>array_fill(0,12,0),'reached'=>array_fill(0,12,0),'last_lap'=>-1,'build'=>'analytics-1'];
         if($old['visitor']!==$visitor) { http_response_code(409);exit; }
+        // Resolve once per visit; older records may gain a location on their next real update.
+        if (!array_key_exists('location',$old)) $old['location']=rough_location();
         foreach($metrics as $k=>$v)$old['metrics'][$k]=max($old['metrics'][$k],$v);
         for($i=0;$i<12;$i++){ $old['falls_by_lap'][$i]=max($old['falls_by_lap'][$i],$d['falls_by_lap'][$i]);$old['reached'][$i]=max($old['reached'][$i],$d['reached'][$i]); }
         if($d['seq']>$old['seq']){ $old['seq']=$d['seq'];$old['last_lap']=$d['last_lap'];$old['last_seen']=time(); }

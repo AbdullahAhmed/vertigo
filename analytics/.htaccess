@@ -5,3 +5,4 @@ Options -Indexes
 <FilesMatch "\.(json|lock|zip|log|bak)$">
   Require all denied
 </FilesMatch>
+GeoIPEnable On

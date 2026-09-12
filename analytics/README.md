@@ -63,3 +63,18 @@ store backed up. The collector itself updates only one session record per reques
 `python tests/analytics-backend.py <php executable>` runs real PHP HTTP integration checks with isolated data:
 login, unauthenticated denial, input rejection, deduplication, multiple plays, exports and debug filtering.
 Also run the normal build/audio/mobile checks and the browser scene harness before publishing the game.
+
+## Approximate locations
+
+Hostinger GeoIP is enabled only in this analytics directory using `GeoIPEnable On` in `.htaccess`.
+The collector reads the server-generated `GEOIP_COUNTRY_CODE`, `GEOIP_COUNTRY_NAME`, and optional
+`GEOIP_REGION_NAME`/`GEOIP_REGION` variables. HTTP headers and client-supplied location fields are
+never trusted. No browser permission, external IP lookup request, raw IP, city or coordinates are used
+or stored by this feature. Hostinger maintains its own database. See
+https://www.hostinger.com/support/3738302-how-to-enable-geoip-at-hostinger/ .
+
+Location is captured once per visit. Old visits without location show Unknown; an old visit still sending
+updates can gain a location. The private dashboard and JSON export include country/region breakdowns.
+Unique browsers within locations may overlap across visits. VPNs, proxies and carrier routing can place
+players elsewhere; this is not proof of their physical location. If GeoIP is unavailable, tracking continues
+with Unknown. On hosts without this directive, remove `GeoIPEnable On` before deploying.

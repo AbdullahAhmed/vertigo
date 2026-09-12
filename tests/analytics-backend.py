@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='vertigo-analytics-test-') as tmp:
     password=secrets.token_urlsafe(24)
     hashed=subprocess.check_output([php,'-r','echo password_hash(stream_get_contents(STDIN),PASSWORD_BCRYPT);'],input=password.encode()).decode()
     (site/'analytics/config.php').write_text("<?php return ['password_hash'=>'"+hashed+"','secret'=>'"+secrets.token_hex(32)+"','origin'=>'"+origin+"','data_dir'=>'"+str(tmp/'private').replace('\\','/')+"'];",encoding='utf8')
-    server=subprocess.Popen([php,'-S','127.0.0.1:8770','-t',str(site)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    server=subprocess.Popen([php,'-S','127.0.0.1:8770','-t',str(site)],env={**os.environ,'GEOIP_COUNTRY_CODE':'CA','GEOIP_COUNTRY_NAME':'Canada','GEOIP_REGION_NAME':'Alberta'},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     def req(path,data=None,opener=None,origin_header=origin):
         body=json.dumps(data).encode() if isinstance(data,dict) else data
         headers={'Origin':origin_header,'Content-Type':'text/plain'} if body is not None else {}
@@ -45,12 +45,16 @@ with tempfile.TemporaryDirectory(prefix='vertigo-analytics-test-') as tmp:
         payload2={**payload,'session':str(uuid.uuid4()),'seq':1,'metrics':{**payload['metrics'],'max_height':20}};req('collect.php',payload2)
         r=report();check(r['unique_players']==1 and r['totals']['plays']==2,'two plays in one browser count as one unique player')
         check(r['totals']['max_height']==20,'maximum height is a maximum, not a sum')
+        check(r['locations'][0]['country']=='CA' and r['locations'][0]['region']=='Alberta' and r['locations'][0]['unique_players']==1 and r['locations'][0]['plays']==2,'location breakdown deduplicates browsers across plays')
         payload2.update(seq=2,test=True);req('collect.php',payload2)
         r=report();check(r['totals']['plays']==1 and report(True)['totals']['plays']==1,'debug marking removes whole run from normal totals')
         stale={**payload,'seq':0};check(req('collect.php',stale)[0]==400,'invalid sequence rejected')
         updated={**payload,'seq':3,'metrics':{**payload['metrics'],'falls':3},'last_lap':2};req('collect.php',updated);req('collect.php',payload)
         check(report()['totals']['falls']==3,'late stale uploads cannot lower totals')
         check(req('export.php?format=csv',opener=opener)[0]==200,'authenticated CSV export works')
+        record=next(p for p in (tmp/'private/sessions').glob('*/*.json') if not json.loads(p.read_text())['test'])
+        legacy=json.loads(record.read_text());legacy.pop('location');record.write_text(json.dumps(legacy))
+        check(report()['locations'][0]['country'] is None,'historical records without location remain readable as unknown')
         check(req('../.vertigo-analytics/sessions/')[0]==404,'storage is outside public root')
         (root/'build/deploy/dashboard-preview.html').write_bytes(dashboard.replace(csrf.encode(),b'REDACTED'))
     finally:server.terminate();server.wait(timeout=10)

@@ -65,9 +65,23 @@ function auth_start(): void {
 function authenticated(): bool { return ($_SESSION['authenticated_until'] ?? 0) > time(); }
 function require_auth(): void { if (!authenticated()) { http_response_code(401); exit('Sign in required.'); } }
 function e($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function rough_location(): array {
+    // Only web-server GeoIP variables are trusted. HTTP_* headers and client payloads are not.
+    $read = static function(string $key): string {
+        foreach ([$key,'REDIRECT_'.$key] as $name) {
+            $value=$_SERVER[$name] ?? getenv($name);
+            if (is_string($value) && $value!=='' && strlen($value)<=120 && preg_match('/^[\p{L}\p{N} .,_()\x{2019}\x{0027}-]+$/u',$value)) return trim($value);
+        }
+        return '';
+    };
+    $country=strtoupper($read('GEOIP_COUNTRY_CODE'));
+    if (!preg_match('/^[A-Z]{2}$/D',$country) || in_array($country,['ZZ','XX','EU','AP'],true)) return ['country'=>null,'country_name'=>null,'region'=>null];
+    return ['country'=>$country,'country_name'=>$read('GEOIP_COUNTRY_NAME') ?: $country,'region'=>$read('GEOIP_REGION_NAME') ?: ($read('GEOIP_REGION') ?: null)];
+}
 function report(string $range, bool $tests): array {
     $now=time(); $since = $range==='today' ? strtotime('today UTC') : ($range==='7' ? $now-7*86400 : ($range==='30' ? $now-30*86400 : 0));
     $totals=array_fill_keys(metric_names(),0); $visitors=[]; $daily=[]; $platforms=[]; $laps=array_fill(0,12,['reached'=>0,'falls'=>0,'last'=>0]); $recent=[]; $allCount=0; $first=null; $testsCount=0;
+    $locations=[]; $locationVisitors=[];
     foreach (glob(config()['data_dir'].'/sessions/*/*.json') ?: [] as $f) {
         $s=json_read($f); $allCount++; $first=min($first ?? $s['created'],$s['created']);
         if ($s['test']) $testsCount++;
@@ -78,11 +92,20 @@ function report(string $range, bool $tests): array {
         foreach ($totals as $k=>$_) $totals[$k] = $k==='max_height' ? max($totals[$k],$m[$k]) : $totals[$k]+$m[$k];
         foreach ($daily[$date] as $k=>$_) $daily[$date][$k]+=$m[$k];
         foreach ($platforms[$s['platform']] as $k=>$_) $platforms[$s['platform']][$k]+=$m[$k];
-        if ($m['plays']>0) $visitors[$s['visitor']]=true;
+        $geo=$s['location'] ?? ['country'=>null,'country_name'=>null,'region'=>null];
+        if ($m['plays']>0) {
+            $visitors[$s['visitor']]=true;
+            $key=($geo['country'] ?? 'Unknown').'|'.($geo['region'] ?? '');
+            $locations[$key] ??= $geo+['plays'=>0,'falls'=>0,'completions'=>0,'climbed_m'=>0];
+            foreach(['plays','falls','completions','climbed_m'] as $k) $locations[$key][$k]+=$m[$k];
+            $locationVisitors[$key][$s['visitor']]=true;
+        }
         for($i=0;$i<12;$i++){ $laps[$i]['reached']+=$s['reached'][$i]; $laps[$i]['falls']+=$s['falls_by_lap'][$i]; }
         if ($m['plays'] && !$m['completions'] && $s['last_seen']<$now-120 && $s['last_lap']>=0) $laps[$s['last_lap']]['last']++;
-        $recent[]=['started'=>gmdate('c',$s['created']),'updated'=>gmdate('c',$s['last_seen']),'platform'=>$s['platform'],'kind'=>$m['plays']?($m['continues']?'continue':'new'):'visit only','meters'=>$m['climbed_m'],'falls'=>$m['falls'],'height'=>$m['max_height'],'completed'=>(bool)$m['completions'],'debug'=>$s['test']];
+        $recent[]=['started'=>gmdate('c',$s['created']),'updated'=>gmdate('c',$s['last_seen']),'platform'=>$s['platform'],'location'=>$geo,'kind'=>$m['plays']?($m['continues']?'continue':'new'):'visit only','meters'=>$m['climbed_m'],'falls'=>$m['falls'],'height'=>$m['max_height'],'completed'=>(bool)$m['completions'],'debug'=>$s['test']];
     }
     ksort($daily);usort($recent,fn($a,$b)=>strcmp($b['updated'],$a['updated']));
-    return ['generated'=>gmdate('c'),'tracking_since'=>$first?gmdate('c',$first):null,'range'=>$range,'test_mode'=>$tests,'unique_players'=>count($visitors),'totals'=>$totals,'daily'=>$daily,'platforms'=>$platforms,'laps'=>$laps,'recent'=>array_slice($recent,0,100),'test_sessions'=>$testsCount,'stored_sessions'=>$allCount];
+    foreach($locations as $key=>&$location) $location['unique_players']=count($locationVisitors[$key]);
+    unset($location); usort($locations,fn($a,$b)=>$b['plays']<=>$a['plays']);
+    return ['generated'=>gmdate('c'),'tracking_since'=>$first?gmdate('c',$first):null,'range'=>$range,'test_mode'=>$tests,'unique_players'=>count($visitors),'totals'=>$totals,'daily'=>$daily,'platforms'=>$platforms,'locations'=>$locations,'laps'=>$laps,'recent'=>array_slice($recent,0,100),'test_sessions'=>$testsCount,'stored_sessions'=>$allCount];
 }
